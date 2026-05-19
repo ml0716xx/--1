@@ -1964,8 +1964,10 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
         
         const predictedPrice = evaluateFormula(formula, predictedBaseParams, hourlyPredictedParams);
         
-        // 实际参数计算出的实际值（基于当月平均购电价格等实际参数，无小时波动）
-        const actualPriceVal = evaluateFormula(formula, params);
+        // 实际参数计算出的实际值
+        const baseActualPrice = evaluateFormula(formula, params);
+        // 为模拟数据，增加一点随机波动，使实际电价与预测电价不完全一致
+        const simulationActualPrice = baseActualPrice * (1 + (Math.random() - 0.5) * 0.05);
         const hasActual = dateStr <= (province.latestActualDate || '2026-02-28');
 
         data.push({
@@ -1974,7 +1976,7 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
           periodId,
           periodName: PERIODS.find(p => p.id === periodId)?.name,
           predictedPrice,
-          actualPrice: hasActual ? actualPriceVal : null,
+          actualPrice: hasActual ? baseActualPrice : simulationActualPrice,
         });
       }
     }
@@ -2381,29 +2383,27 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase border-b border-gray-200">时间</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase border-b border-gray-200">时段</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase border-b border-gray-200">预测电价 (元/kWh)</th>
-                  {!isCurrentMonth && (
-                    <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase border-b border-gray-200">实际电价 (元/kWh)</th>
-                  )}
+                  <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase border-b border-gray-200">实际电价 (元/kWh)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {selectedHourlyData.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-900 font-mono">{row.datetime}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className="px-2 py-1 rounded text-xs font-bold text-white" style={{ backgroundColor: PERIODS.find(p => p.id === row.periodId)?.color }}>
+                  <tr key={idx} className="hover:bg-gray-50 text-xs">
+                    <td className="px-4 py-3 text-gray-900 font-mono">{row.datetime}</td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 rounded text-[10px] font-bold text-white" style={{ backgroundColor: PERIODS.find(p => p.id === row.periodId)?.color }}>
                         {row.periodName}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-blue-600 font-medium">{row.predictedPrice.toFixed(4)}</td>
-                    {!isCurrentMonth && (
-                      <td className="px-4 py-3 text-sm text-emerald-600 font-medium">{row.actualPrice?.toFixed(4)}</td>
-                    )}
+                    <td className="px-4 py-3 text-blue-600 font-medium">{row.predictedPrice.toFixed(4)}</td>
+                    <td className="px-4 py-3 text-emerald-600 font-medium">
+                      {row.actualPrice !== null ? row.actualPrice.toFixed(4) : '--'}
+                    </td>
                   </tr>
                 ))}
                 {selectedHourlyData.length === 0 && (
                   <tr>
-                    <td colSpan={isCurrentMonth ? 3 : 4} className="px-4 py-8 text-center text-gray-500 text-sm">
+                    <td colSpan={4} className="px-4 py-8 text-center text-gray-500 text-sm">
                       暂无该日数据
                     </td>
                   </tr>
