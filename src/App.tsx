@@ -15,6 +15,7 @@ type Province = {
   boundStationsCount: number;
   latestMonth: string;
   latestPredictedDate: string;
+  latestActualDate: string;
 };
 
 type SalesPrice = {
@@ -114,14 +115,14 @@ const SALES_PRICES: SalesPrice[] = [
 ];
 
 const PROVINCES: Province[] = [
-  { id: '1', level1Region: '江苏省', name: '江苏省', priceName: '江苏省固定分时', usageType1: '单一制(100千伏安及以上)', usageType2: '工商业', voltage: '1~10（20）千伏', boundStationsCount: 1, latestMonth: '2026-05', latestPredictedDate: '2026-05-21' },
-  { id: '2', level1Region: '山东省', name: '山东省', priceName: '山东电价07', usageType1: '单一制', usageType2: '工商业', voltage: '1~10千伏', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24' },
-  { id: '3', level1Region: '山东省', name: '山东省', priceName: '山东电价06', usageType1: '单一制', usageType2: '工商业', voltage: '不满1千伏', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24' },
-  { id: '4', level1Region: '山东省', name: '山东省', priceName: '山东电价05', usageType1: '两部制', usageType2: '工商业', voltage: '220千伏及以上', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24' },
-  { id: '5', level1Region: '山东省', name: '山东省', priceName: '山东电价04', usageType1: '两部制', usageType2: '工商业', voltage: '110~220千伏以下', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24' },
-  { id: '6', level1Region: '山东省', name: '山东省', priceName: '山东电价03', usageType1: '两部制', usageType2: '工商业', voltage: '1~10千伏', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24' },
-  { id: '7', level1Region: '山东省', name: '山东省', priceName: '山东电价02', usageType1: '两部制', usageType2: '工商业', voltage: '35~110千伏以下', boundStationsCount: 1, latestMonth: '2026-05', latestPredictedDate: '2026-05-24' },
-  { id: '8', level1Region: '山东省', name: '山东省', priceName: '山东电价01', usageType1: '单一制', usageType2: '工商业', voltage: '35千伏及以上', boundStationsCount: 1, latestMonth: '2026-05', latestPredictedDate: '2026-05-24' },
+  { id: '1', level1Region: '江苏省', name: '江苏省', priceName: '江苏省固定分时', usageType1: '单一制(100千伏安及以上)', usageType2: '工商业', voltage: '1~10（20）千伏', boundStationsCount: 1, latestMonth: '2026-05', latestPredictedDate: '2026-05-21', latestActualDate: '2026-05-18' },
+  { id: '2', level1Region: '山东省', name: '山东省', priceName: '山东电价07', usageType1: '单一制', usageType2: '工商业', voltage: '1~10千伏', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24', latestActualDate: '2026-05-19' },
+  { id: '3', level1Region: '山东省', name: '山东省', priceName: '山东电价06', usageType1: '单一制', usageType2: '工商业', voltage: '不满1千伏', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24', latestActualDate: '2026-05-19' },
+  { id: '4', level1Region: '山东省', name: '山东省', priceName: '山东电价05', usageType1: '两部制', usageType2: '工商业', voltage: '220千伏及以上', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24', latestActualDate: '2026-05-19' },
+  { id: '5', level1Region: '山东省', name: '山东省', priceName: '山东电价04', usageType1: '两部制', usageType2: '工商业', voltage: '110~220千伏以下', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24', latestActualDate: '2026-05-19' },
+  { id: '6', level1Region: '山东省', name: '山东省', priceName: '山东电价03', usageType1: '两部制', usageType2: '工商业', voltage: '1~10千伏', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24', latestActualDate: '2026-05-19' },
+  { id: '7', level1Region: '山东省', name: '山东省', priceName: '山东电价02', usageType1: '两部制', usageType2: '工商业', voltage: '35~110千伏以下', boundStationsCount: 1, latestMonth: '2026-05', latestPredictedDate: '2026-05-24', latestActualDate: '2026-05-19' },
+  { id: '8', level1Region: '山东省', name: '山东省', priceName: '山东电价01', usageType1: '单一制', usageType2: '工商业', voltage: '35千伏及以上', boundStationsCount: 1, latestMonth: '2026-05', latestPredictedDate: '2026-05-24', latestActualDate: '2026-05-19' },
 ];
 
 const PARAM_LABELS: Record<string, string> = {
@@ -1561,6 +1562,7 @@ function PriceList({ onViewDetails }: { onViewDetails: (p: Province) => void }) 
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">电压等级</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">最新基础电价月份</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">最新预测数据日期</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">最新实际电价日期</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">绑定电站数量</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200 w-32">操作</th>
               </tr>
@@ -1578,6 +1580,9 @@ function PriceList({ onViewDetails }: { onViewDetails: (p: Province) => void }) 
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 font-mono text-xs">
                     {province.latestPredictedDate}
+                  </td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600 font-mono text-xs">
+                    {province.latestActualDate}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                     <div className="flex justify-start">
@@ -1918,8 +1923,10 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
     });
   };
 
-  const handleFormulaChange = (key: string, value: string) => {
-    // Read-only in details view now, handled in FormulaConfigTab
+  const handleQuickFormulaEdit = (periodId: string, newFormula: string) => {
+    setFormulaConfigs(prev => prev.map(c => 
+      c.id === activeConfig.id ? { ...c, formulas: { ...c.formulas, [periodId]: newFormula }, updateTime: new Date().toISOString().replace('T', ' ').substring(0, 16) } : c
+    ));
   };
 
   const calculatedPrices = useMemo(() => {
@@ -1958,7 +1965,8 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
         const predictedPrice = evaluateFormula(formula, predictedBaseParams, hourlyPredictedParams);
         
         // 实际参数计算出的实际值（基于当月平均购电价格等实际参数，无小时波动）
-        const actualPrice = evaluateFormula(formula, params);
+        const actualPriceVal = evaluateFormula(formula, params);
+        const hasActual = dateStr <= (province.latestActualDate || '2026-02-28');
 
         data.push({
           datetime: `${dateStr} ${h.toString().padStart(2, '0')}:00`,
@@ -1966,7 +1974,7 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
           periodId,
           periodName: PERIODS.find(p => p.id === periodId)?.name,
           predictedPrice,
-          actualPrice: month === '2026-02' ? actualPrice : null,
+          actualPrice: hasActual ? actualPriceVal : null,
         });
       }
     }
@@ -2004,7 +2012,7 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
     return dataByHour;
   }, [monthHourlyData, selectedDates]);
 
-  const isCurrentMonth = month === '2026-03';
+  const isCurrentMonth = month >= '2026-05';
 
   return (
     <div className="flex flex-col space-y-4 h-full">
@@ -2045,7 +2053,9 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
               onChange={(e) => setMonth(e.target.value)}
               className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
             >
-              <option value="2026-03">2026-03 (当前月)</option>
+              <option value="2026-05">2026-05 (预测月)</option>
+              <option value="2026-04">2026-04 (历史月)</option>
+              <option value="2026-03">2026-03 (历史月)</option>
               <option value="2026-02">2026-02 (历史月)</option>
             </select>
             <button className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors cursor-pointer">
@@ -2080,7 +2090,7 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
                     </select>
                   </div>
                   <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                    当前: {province.elecType} - {province.voltage}
+                    当前: {elecType} - {province.voltage}
                   </span>
                 </div>
               </div>
@@ -2132,9 +2142,13 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
                       </span>
                     </div>
                     <div className="flex-1">
-                      <div className="w-full border border-gray-200 bg-gray-50 rounded px-3 py-1.5 text-sm font-mono text-gray-600 truncate" title={formulas[period.id]}>
-                        {formulas[period.id]}
-                      </div>
+                      <input 
+                        type="text"
+                        value={formulas[period.id]}
+                        onChange={(e) => handleQuickFormulaEdit(period.id, e.target.value)}
+                        className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm font-mono text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white" 
+                        title={formulas[period.id]}
+                      />
                     </div>
                     <div className="w-24 shrink-0 text-right">
                       <span className="text-sm font-bold text-gray-800">
@@ -2295,6 +2309,12 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
                                       <span className="font-mono text-emerald-600">{actual.toFixed(4)} 元/kWh</span>
                                     </div>
                                   )}
+                                  {isCurrentMonth && actual !== undefined && actual !== null && (
+                                    <div className="flex justify-between space-x-4">
+                                      <span className="text-gray-600">实际:</span>
+                                      <span className="font-mono text-emerald-600">{actual.toFixed(4)} 元/kWh</span>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -2306,8 +2326,9 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                {selectedDates.flatMap((date, index) => {
+                  {selectedDates.flatMap((date, index) => {
                   const color = CHART_COLORS[index % CHART_COLORS.length];
+                  const hasActualForThisDate = monthHourlyData.some(d => d.datetime.startsWith(date) && d.actualPrice !== null);
                   const lines = [
                     <Line 
                       key={`predicted_${date}`}
@@ -2320,7 +2341,7 @@ function PriceDetail({ province, onBack }: { province: Province, onBack: () => v
                       activeDot={{ r: 4, fill: color, stroke: '#fff', strokeWidth: 2 }} 
                     />
                   ];
-                  if (!isCurrentMonth) {
+                  if (hasActualForThisDate) {
                     lines.push(
                       <Line 
                         key={`actual_${date}`}
@@ -2661,6 +2682,7 @@ function FormulaConfigTab({ params, configs, setConfigs }: { params: Record<stri
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 border-b border-gray-200">适用日期</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 border-b border-gray-200">时段</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 border-b border-gray-200">公式</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 border-b border-gray-200">计算结果(元)</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 border-b border-gray-200">更新时间</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 border-b border-gray-200">创建人</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 border-b border-gray-200">操作</th>
@@ -2679,6 +2701,9 @@ function FormulaConfigTab({ params, configs, setConfigs }: { params: Record<stri
                       <td className="px-4 py-3 text-sm text-gray-900 border-b border-r border-gray-200">{period.name}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 border-b border-r border-gray-200 text-left font-mono text-xs">
                         {config.formulas[period.id]}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-emerald-600 border-b border-r border-gray-200 font-mono font-bold">
+                        {evaluateFormula(config.formulas[period.id], params)}
                       </td>
                       {index === 0 && (
                         <td rowSpan={PERIODS.length} className="px-4 py-3 text-sm text-gray-500 border-b border-r border-gray-200 align-middle">
