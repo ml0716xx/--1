@@ -1,6 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Building2, MapPin, Server, BadgeDollarSign, ChevronLeft, Search, RotateCcw, Plus, User, Bell, Calendar, X, ChevronDown, RefreshCw } from 'lucide-react';
+import { 
+  Building2, MapPin, Server, BadgeDollarSign, ChevronLeft, Search, RotateCcw, Plus, User, Bell, Calendar, X, ChevronDown, RefreshCw,
+  ChevronRight, Check, AlertTriangle, Info, Sliders, Database, Play, Pause, Trash2, ArrowLeft, ExternalLink, Lock, Unlock, Package,
+  Users, CheckSquare, Square, ShieldCheck, History, BookOpen, Sparkles, Send, Layout 
+} from 'lucide-react';
+import { GridWorkspaceContainer } from './components/GridWorkspace';
 
 // --- Types & Mock Data ---
 
@@ -242,14 +247,722 @@ const evaluateFormula = (formula: string, params: Record<string, number>, overri
   }
 };
 
+// --- Version & Feature Types ---
+export type Version = {
+  id: string;
+  name: string;
+  code: string;
+  order: number;
+  description: string;
+  permissions: string[];
+  createdAt: string;
+};
+
+export type FeaturePack = {
+  id: string;
+  name: string;
+  code: string;
+  category: 'architecture' | 'strategy' | 'basic';
+  description: string;
+  order: number;
+  permissions: string[];
+  createdAt: string;
+};
+
+export type EnterpriseFeature = {
+  featureId: string; // references FeaturePack.code
+  startDate: string;
+  endDate: string;
+  status: 'active' | 'warning' | 'expired';
+};
+
+export type EnterpriseAssign = {
+  id: string;
+  name: string;
+  baseVersionId: string; // references Version.code
+  validityStart: string;
+  validityEnd: string;
+  features: EnterpriseFeature[];
+};
+
+export type PermissionItem = {
+  code: string;
+  name: string;
+};
+
+export type PermissionCategory = {
+  category: string;
+  items: PermissionItem[];
+};
+
+export type PushRecord = {
+  id: string;
+  time: string;
+  content: string;
+  target: string;
+  status: 'success' | 'fail';
+  payload: string; // stringified JSON
+};
+
+// --- Version & Feature Mock Data ---
+export const ALL_PERMISSIONS: PermissionCategory[] = [
+  {
+    category: '仪表盘',
+    items: [
+      { code: 'dash:overview', name: '微网总览' },
+      { code: 'dash:multi', name: '多站总览' },
+      { code: 'dash:single', name: '单站总览' },
+      { code: 'dash:screen', name: '监控大屏' },
+      { code: 'dash:trina_screen', name: '天合储能监控大屏' }
+    ]
+  },
+  {
+    category: '盈利方 AI',
+    items: [
+      { code: 'profit:cube', name: '天合盈立方' },
+      { code: 'profit:overview', name: '运行概览' },
+      { code: 'profit:algo', name: '算法监控' },
+      { code: 'profit:algo_strategy_tab', name: '算法监控-策略监控Tab (按钮574)' }
+    ]
+  },
+  {
+    category: '监控中心',
+    items: [
+      { code: 'monitor:overview', name: '监控概览' },
+      { code: 'monitor:wiring', name: '主接线图' },
+      { code: 'monitor:predict', name: '算法预测监控' },
+      { code: 'monitor:run_overview', name: '运行概览' },
+      { code: 'monitor:strategy', name: '策略监控' },
+      { code: 'monitor:global_tab', name: '全局视角标签页 (按钮390)' },
+      { code: 'monitor:single_strategy_tab', name: '单策略视角标签页 (按钮391)' },
+      { code: 'monitor:algo_monitor', name: '算法监控' },
+      { code: 'monitor:device', name: '设备监控' },
+      { code: 'monitor:dev_edit', name: '前往编辑 (按钮226)' },
+      { code: 'monitor:dev_view', name: '查看 (按钮227)' },
+      { code: 'monitor:ctrl_pv', name: '远程控制-光伏 (按钮273)' },
+      { code: 'monitor:ctrl_storage', name: '远程控制-储能 (按钮519)' },
+      { code: 'monitor:ctrl_v2g', name: '远程控制-V2G充电枪 (按钮520)' },
+      { code: 'monitor:dev_data', name: '设备监控-设备数据 (按钮525)' },
+      { code: 'monitor:dev_compare', name: '设备监控-对比分析 (按钮526)' },
+      { code: 'monitor:sys', name: '系统监控' },
+      { code: 'monitor:pv_sys', name: '光伏监控' },
+      { code: 'monitor:pv_tab_dev', name: '设备tab页 (按钮344)' },
+      { code: 'monitor:pv_tab_power', name: '功率tab页 (按钮345)' },
+      { code: 'monitor:pv_tab_eff', name: '能效tab页 (按钮346)' },
+      { code: 'monitor:pv_tab_disp', name: '离散率tab页 (按钮347)' },
+      { code: 'monitor:storage_sys', name: '储能监控' },
+      { code: 'monitor:storage_eff', name: '充放效率分析 (按钮501)' },
+      { code: 'monitor:storage_voltage', name: '电压即时监控 (按钮502)' },
+      { code: 'monitor:storage_temp', name: '温度即时监控 (按钮503)' },
+      { code: 'monitor:storage_cell_v', name: '电芯电压分析 (按钮504)' },
+      { code: 'monitor:storage_cell_temp', name: '电芯温差统计 (按钮505)' },
+      { code: 'monitor:storage_topo', name: '储能拓扑监控 (按钮522)' },
+      { code: 'monitor:ev_sys', name: '充电桩监控' }
+    ]
+  },
+  {
+    category: '报警管理',
+    items: [
+      { code: 'alarm:fault', name: '故障报警' },
+      { code: 'alarm:dev', name: '设备报警 (按钮523)' },
+      { code: 'alarm:event', name: '事件报警 (按钮524)' }
+    ]
+  },
+  {
+    category: '统计报表',
+    items: [
+      { code: 'report:elec', name: '电量报表' },
+      { code: 'report:elec_gen', name: '生成报表 (按钮247)' },
+      { code: 'report:revenue', name: '收益报表' },
+      { code: 'report:rev_total', name: '总收益报表 (按钮298)' },
+      { code: 'report:rev_total_export', name: '总收益报表-导出 (按钮299)' },
+      { code: 'report:rev_pv', name: '光伏收益报表 (按钮300)' },
+      { code: 'report:rev_pv_export', name: '光伏收益报表-导出 (按钮301)' },
+      { code: 'report:rev_storage', name: '储能收益 (按钮302)' },
+      { code: 'report:rev_storage_export', name: '储能收益报表-导出 (按钮303)' },
+      { code: 'report:rev_ev', name: '充电收益报表 (按钮304)' },
+      { code: 'report:rev_ev_export', name: '充电收益报表-导出 (按钮305)' }
+    ]
+  },
+  {
+    category: '智能报告',
+    items: [
+      { code: 'smart:strategy_run', name: '策略运行报告' },
+      { code: 'smart:ai_light', name: 'AI轻智能分析报告' },
+      { code: 'smart:biz_analysis', name: '经营分析报告' },
+      { code: 'smart:biz_export', name: '经营分析报告-导出 (按钮350)' },
+      { code: 'smart:dev_diag', name: '设备诊断报告' },
+      { code: 'smart:dev_diag_export', name: '设备诊断报告-导出 (按钮296)' },
+      { code: 'smart:ai_dispatch', name: 'AI调度策略报告' },
+      { code: 'smart:ai_dispatch_export', name: 'AI调度策略报告-导出 (按钮489)' }
+    ]
+  },
+  {
+    category: '策略管理',
+    items: [
+      { code: 'strategy:config', name: '策略配置' },
+      { code: 'strategy:tab_common', name: '公共配置tab (按钮249)' },
+      { code: 'strategy:edit_common', name: '公共配置-编辑 (按钮250)' },
+      { code: 'strategy:tab_arbitrage', name: '峰谷套利tab (按钮251)' },
+      { code: 'strategy:tab_dynamic', name: '动态增容tab (按钮256)' },
+      { code: 'strategy:tab_transformer', name: '台区配储tab (按钮258)' },
+      { code: 'strategy:edit_transformer', name: '台区配储-编辑 (按钮259)' },
+      { code: 'strategy:tab_demand', name: '需量控制tab (按钮337)' },
+      { code: 'strategy:tab_self', name: '自发自用tab (按钮343)' },
+      { code: 'strategy:surplus_grid', name: '余电上网策略 (按钮493)' },
+      { code: 'strategy:reverse_flow_param', name: '公共配置可逆流参数 (按钮518)' },
+      { code: 'strategy:ai_param', name: 'AI相关参数标签页 (按钮969)' },
+      { code: 'strategy:demand_mode', name: '需量更新模式切换 (按钮968)' },
+      { code: 'strategy:run', name: '策略运行' },
+      { code: 'strategy:combo_del', name: '策略组合-删除 (按钮330)' },
+      { code: 'strategy:combo_edit', name: '策略组合-编辑 (按钮331)' },
+      { code: 'strategy:combo_add', name: '策略组合-新增 (按钮332)' },
+      { code: 'strategy:batch_apply', name: '策略排期-批量应用 (按钮334)' },
+      { code: 'strategy:tab_combo', name: '策略组合标签页 (按钮335)' },
+      { code: 'strategy:tab_schedule', name: '策略排期标签页 (按钮336)' },
+      { code: 'strategy:capacity_reserve', name: '预留容量 (按钮462)' },
+      { code: 'strategy:period_add', name: '时段新增策略 (按钮463)' },
+      { code: 'strategy:custom_strategy', name: '策略排期-自定义策略 (按钮464)' },
+      { code: 'strategy:ai_dispatch', name: '策略排期-AI调度 (按钮491)' },
+      { code: 'strategy:light_strategy', name: '策略排期-轻智能 (按钮492)' },
+      { code: 'strategy:ai_switch', name: 'AI排程开关 (按钮970)' },
+      { code: 'strategy:light_smart', name: '轻智能' },
+      { code: 'strategy:light_edit', name: '轻智能-编辑 (按钮486)' },
+      { code: 'strategy:light_switch', name: 'AI轻智能-开关 (按钮565)' }
+    ]
+  },
+  {
+    category: '微网管理',
+    items: [
+      { code: 'grid:site', name: '站点管理' },
+      { code: 'grid:site_view', name: '站点查看 (按钮239)' },
+      { code: 'grid:site_del', name: '站点删除 (按钮240)' },
+      { code: 'grid:site_edit', name: '站点编辑 (按钮241)' },
+      { code: 'grid:site_add', name: '站点新增 (按钮242)' },
+      { code: 'grid:device', name: '设备管理' },
+      { code: 'grid:device_view', name: '设备查看 (按钮235)' },
+      { code: 'grid:device_del', name: '设备删除 (按钮236)' },
+      { code: 'grid:device_edit', name: '设备编辑 (按钮237)' },
+      { code: 'grid:device_add', name: '设备新增 (按钮238)' },
+      { code: 'grid:transformer_sub_add', name: '二级变压器-新增 (按钮521)' },
+      { code: 'grid:topo', name: '拓扑管理' },
+      { code: 'grid:topo_view', name: '拓扑查看 (按钮232)' },
+      { code: 'grid:topo_apply', name: '拓扑下发 (按钮233)' },
+      { code: 'grid:topo_edit', name: '拓扑编辑 (按钮234)' },
+      { code: 'grid:price', name: '电价配置' },
+      { code: 'grid:buy_view', name: '购电电价-查看 (按钮228)' },
+      { code: 'grid:buy_del', name: '购电电价-删除 (按钮229)' },
+      { code: 'grid:buy_edit', name: '购电电价-编辑 (按钮230)' },
+      { code: 'grid:buy_add', name: '购电电价-新增 (按钮231)' },
+      { code: 'grid:buy_tab', name: '购电电价标签页 (按钮306)' },
+      { code: 'grid:sell_tab', name: '售电电价标签页 (按钮307)' },
+      { code: 'grid:sell_edit', name: '售电电价-编辑 (按钮308)' },
+      { code: 'grid:ev_sell_tab', name: '充电站售电标签页 (按钮435)' },
+      { code: 'grid:ev_sell_add', name: '充电站售电电价-新增 (按钮436)' },
+      { code: 'grid:ev_sell_edit', name: '充电站售电电价-编辑 (按钮437)' },
+      { code: 'grid:ev_sell_del', name: '充电站售电电价-删除 (按钮438)' },
+      { code: 'grid:metrics', name: '指标配置' },
+      { code: 'grid:metrics_pv', name: '光伏指标编辑 (按钮271)' },
+      { code: 'grid:metrics_storage', name: '储能指标编辑 (按钮272)' },
+      { code: 'grid:demand_response', name: '需求响应' },
+      { code: 'grid:demand_add', name: '需求响应-新增 (按钮432)' },
+      { code: 'grid:demand_edit', name: '需求响应-编辑 (按钮433)' },
+      { code: 'grid:demand_del', name: '需求响应-删除 (按钮434)' },
+      { code: 'grid:schedule_mgt', name: '排班管理' },
+      { code: 'grid:schedule_add', name: '排班管理-新增 (按钮468)' },
+      { code: 'grid:schedule_edit', name: '排班管理-编辑 (按钮469)' },
+      { code: 'grid:schedule_del', name: '排班管理-删除 (按钮470)' }
+    ]
+  },
+  {
+    category: '系统日志',
+    items: [
+      { code: 'log:operation', name: '操作日志' },
+      { code: 'log:exception', name: '系统日志-异常数据处理日志' }
+    ]
+  }
+];
+
+export const INITIAL_VERSIONS: Version[] = [
+  {
+    id: 'V1',
+    name: '基础版',
+    code: 'basic',
+    order: 1,
+    description: '基础可用版，提供电量/收益报表、基础监控及核心控制策略。',
+    permissions: [
+      'dash:overview', 'dash:multi', 'dash:single',
+      'monitor:run_overview', 'monitor:strategy', 'monitor:global_tab', 'monitor:single_strategy_tab',
+      'monitor:device', 'monitor:dev_view', 'monitor:dev_edit', 'monitor:ctrl_pv', 'monitor:ctrl_storage',
+      'alarm:fault',
+      'report:elec', 'report:elec_gen', 'report:revenue', 'report:rev_total', 'report:rev_total_export', 'report:rev_pv', 'report:rev_pv_export', 'report:rev_storage', 'report:rev_storage_export', 'report:rev_ev', 'report:rev_ev_export',
+      'strategy:config', 'strategy:tab_common', 'strategy:edit_common', 'strategy:tab_arbitrage', 'strategy:tab_dynamic', 'strategy:tab_transformer', 'strategy:edit_transformer', 'strategy:tab_demand', 'strategy:tab_self',
+      'strategy:run', 'strategy:combo_del', 'strategy:combo_edit', 'strategy:combo_add', 'strategy:batch_apply', 'strategy:tab_combo', 'strategy:tab_schedule', 'strategy:capacity_reserve', 'strategy:period_add', 'strategy:custom_strategy',
+      'grid:site', 'grid:site_view', 'grid:site_del', 'grid:site_edit', 'grid:site_add',
+      'grid:device', 'grid:device_view', 'grid:device_del', 'grid:device_edit', 'grid:device_add',
+      'grid:topo', 'grid:topo_view', 'grid:topo_apply', 'grid:topo_edit',
+      'grid:price', 'grid:buy_view', 'grid:buy_del', 'grid:buy_edit', 'grid:buy_add', 'grid:buy_tab', 'grid:sell_tab', 'grid:sell_edit'
+    ],
+    createdAt: '2026-06-10 14:30'
+  },
+  {
+    id: 'V2',
+    name: '标准版',
+    code: 'standard',
+    order: 2,
+    description: '主流全套监控与高级控制版本，包含监控大屏、系统监控、AI相关策略以及异常日志。',
+    permissions: [
+      'dash:overview', 'dash:multi', 'dash:single', 'dash:screen',
+      'monitor:overview', 'monitor:strategy', 'monitor:global_tab', 'monitor:single_strategy_tab', 'monitor:algo_monitor',
+      'monitor:device', 'monitor:dev_view', 'monitor:dev_edit', 'monitor:ctrl_pv', 'monitor:ctrl_storage', 'monitor:dev_data', 'monitor:dev_compare',
+      'monitor:sys', 'monitor:pv_sys', 'monitor:pv_tab_dev', 'monitor:pv_tab_power', 'monitor:pv_tab_eff', 'monitor:pv_tab_disp', 'monitor:storage_sys', 'monitor:storage_eff', 'monitor:storage_voltage', 'monitor:storage_temp', 'monitor:storage_cell_v', 'monitor:storage_cell_temp', 'monitor:storage_topo', 'monitor:ev_sys',
+      'alarm:fault', 'alarm:dev', 'alarm:event',
+      'report:elec', 'report:elec_gen', 'report:revenue', 'report:rev_total', 'report:rev_total_export', 'report:rev_pv', 'report:rev_pv_export', 'report:rev_storage', 'report:rev_storage_export', 'report:rev_ev', 'report:rev_ev_export',
+      'smart:ai_dispatch',
+      'strategy:config', 'strategy:tab_common', 'strategy:edit_common', 'strategy:tab_arbitrage', 'strategy:tab_dynamic', 'strategy:tab_demand', 'strategy:tab_self', 'strategy:surplus_grid', 'strategy:reverse_flow_param', 'strategy:ai_param',
+      'strategy:run', 'strategy:combo_del', 'strategy:combo_edit', 'strategy:combo_add', 'strategy:batch_apply', 'strategy:tab_combo', 'strategy:tab_schedule', 'strategy:capacity_reserve', 'strategy:period_add', 'strategy:custom_strategy', 'strategy:ai_dispatch', 'strategy:light_strategy', 'strategy:ai_switch',
+      'strategy:light_smart', 'strategy:light_edit', 'strategy:light_switch',
+      'grid:site', 'grid:site_view', 'grid:site_del', 'grid:site_edit', 'grid:site_add',
+      'grid:device', 'grid:device_view', 'grid:device_del', 'grid:device_edit', 'grid:device_add', 'grid:transformer_sub_add',
+      'grid:topo', 'grid:topo_view', 'grid:topo_apply', 'grid:topo_edit',
+      'grid:price', 'grid:buy_view', 'grid:buy_del', 'grid:buy_edit', 'grid:buy_add', 'grid:buy_tab', 'grid:sell_tab', 'grid:sell_edit', 'grid:ev_sell_tab', 'grid:ev_sell_add', 'grid:ev_sell_edit', 'grid:ev_sell_del',
+      'grid:metrics', 'grid:metrics_pv', 'grid:metrics_storage', 'grid:schedule_mgt', 'grid:schedule_add', 'grid:schedule_edit', 'grid:schedule_del',
+      'log:operation', 'log:exception'
+    ],
+    createdAt: '2026-06-15 10:20'
+  },
+  {
+    id: 'V3',
+    name: '高级版',
+    code: 'advanced',
+    order: 3,
+    description: '尊享全功能版，支持深度智能经营分析、设备诊断、需求响应及高权限精细指标。',
+    permissions: [
+      'dash:overview', 'dash:multi', 'dash:single', 'dash:screen',
+      'monitor:run_overview', 'monitor:strategy', 'monitor:global_tab', 'monitor:single_strategy_tab',
+      'monitor:device', 'monitor:dev_view', 'monitor:dev_edit', 'monitor:ctrl_pv', 'monitor:ctrl_storage',
+      'monitor:sys', 'monitor:pv_sys', 'monitor:pv_tab_dev', 'monitor:pv_tab_power', 'monitor:pv_tab_eff', 'monitor:pv_tab_disp',
+      'alarm:fault',
+      'report:elec', 'report:elec_gen', 'report:revenue', 'report:rev_total', 'report:rev_total_export', 'report:rev_pv', 'report:rev_pv_export', 'report:rev_storage', 'report:rev_storage_export', 'report:rev_ev', 'report:rev_ev_export',
+      'smart:biz_analysis', 'smart:biz_export', 'smart:dev_diag', 'smart:dev_diag_export',
+      'strategy:config', 'strategy:tab_common', 'strategy:edit_common', 'strategy:tab_arbitrage', 'strategy:tab_dynamic', 'strategy:tab_demand', 'strategy:tab_self',
+      'strategy:run', 'strategy:combo_del', 'strategy:combo_edit', 'strategy:combo_add', 'strategy:batch_apply', 'strategy:tab_combo', 'strategy:tab_schedule', 'strategy:capacity_reserve', 'strategy:period_add', 'strategy:custom_strategy',
+      'grid:site', 'grid:site_view', 'grid:site_del', 'grid:site_edit', 'grid:site_add',
+      'grid:device', 'grid:device_view', 'grid:device_del', 'grid:device_edit', 'grid:device_add',
+      'grid:topo', 'grid:topo_view', 'grid:topo_apply', 'grid:topo_edit',
+      'grid:price', 'grid:buy_view', 'grid:buy_del', 'grid:buy_edit', 'grid:buy_add', 'grid:buy_tab', 'grid:sell_tab', 'grid:sell_edit', 'grid:ev_sell_tab', 'grid:ev_sell_add', 'grid:ev_sell_edit', 'grid:ev_sell_del',
+      'grid:metrics', 'grid:metrics_pv', 'grid:metrics_storage',
+      'grid:demand_response', 'grid:demand_add', 'grid:demand_edit', 'grid:demand_del',
+      'log:operation'
+    ],
+    createdAt: '2026-06-25 09:15'
+  },
+  {
+    id: 'V4',
+    name: '天合新场景BU版',
+    code: 'trina-bu',
+    order: 4,
+    description: '新场景业务专用版本，深度集成盈立方AI智能预测与轻调度。',
+    permissions: [
+      'dash:overview', 'dash:single',
+      'profit:cube', 'profit:overview', 'profit:algo', 'profit:algo_strategy_tab',
+      'monitor:run_overview', 'monitor:strategy', 'monitor:dev_data', 'monitor:dev_compare',
+      'monitor:sys', 'monitor:storage_sys', 'monitor:storage_eff', 'monitor:storage_voltage', 'monitor:storage_temp', 'monitor:storage_cell_v', 'monitor:storage_cell_temp', 'monitor:storage_topo',
+      'smart:ai_dispatch',
+      'strategy:demand_mode'
+    ],
+    createdAt: '2026-07-01 11:30'
+  },
+  {
+    id: 'V5',
+    name: '天合储能版',
+    code: 'trina-storage',
+    order: 5,
+    description: '储能定制版，带有定制的储能大屏、全套拓扑与核心指标管理。',
+    permissions: [
+      'dash:overview', 'dash:single', 'dash:trina_screen',
+      'monitor:run_overview', 'monitor:strategy', 'monitor:dev_data', 'monitor:dev_compare',
+      'monitor:sys', 'monitor:pv_sys', 'monitor:storage_sys', 'monitor:storage_eff', 'monitor:storage_voltage', 'monitor:storage_temp', 'monitor:storage_cell_v', 'monitor:storage_cell_temp', 'monitor:storage_topo',
+      'alarm:fault', 'alarm:dev', 'alarm:event',
+      'report:elec', 'report:revenue',
+      'strategy:run', 'strategy:capacity_reserve', 'strategy:period_add',
+      'grid:site', 'grid:device', 'grid:topo', 'grid:price', 'grid:metrics_storage'
+    ],
+    createdAt: '2026-07-02 14:00'
+  },
+  {
+    id: 'V6',
+    name: '天合储能扩展版',
+    code: 'trina-storage-ext',
+    order: 6,
+    description: '储能深度扩展版，融合了售电配置、二级多变压器支持以及全部调控策略。',
+    permissions: [
+      'dash:overview', 'dash:single', 'dash:screen', 'dash:trina_screen',
+      'monitor:overview',
+      'monitor:sys', 'monitor:pv_sys', 'monitor:storage_sys',
+      'alarm:fault', 'alarm:dev', 'alarm:event',
+      'report:elec', 'report:revenue',
+      'strategy:config', 'strategy:tab_common', 'strategy:edit_common', 'strategy:tab_arbitrage', 'strategy:tab_dynamic', 'strategy:tab_demand', 'strategy:tab_self', 'strategy:surplus_grid',
+      'grid:site', 'grid:device', 'grid:transformer_sub_add', 'grid:topo', 'grid:sell_tab', 'grid:metrics_storage',
+      'log:operation'
+    ],
+    createdAt: '2026-07-05 09:00'
+  },
+  {
+    id: 'V7',
+    name: '盈利方版本',
+    code: 'profit-owner',
+    order: 7,
+    description: '盈利方轻量定制版，拥有简洁的核心看板与基础配置。',
+    permissions: [
+      'dash:overview', 'dash:single',
+      'monitor:run_overview', 'monitor:strategy', 'monitor:device'
+    ],
+    createdAt: '2026-07-08 15:30'
+  },
+  {
+    id: 'V8',
+    name: '测试用版本',
+    code: 'test-version',
+    order: 8,
+    description: '演示与验证全功能测试版。',
+    permissions: [
+      'dash:overview', 'dash:multi', 'dash:single', 'dash:screen', 'dash:trina_screen',
+      'profit:cube', 'profit:overview', 'profit:algo', 'profit:algo_strategy_tab',
+      'monitor:overview', 'monitor:run_overview', 'monitor:strategy', 'monitor:global_tab', 'monitor:single_strategy_tab', 'monitor:algo_monitor', 'monitor:device', 'monitor:dev_view', 'monitor:dev_edit', 'monitor:ctrl_pv', 'monitor:ctrl_storage', 'monitor:dev_data', 'monitor:dev_compare',
+      'monitor:sys', 'monitor:pv_sys', 'monitor:pv_tab_dev', 'monitor:pv_tab_power', 'monitor:pv_tab_eff', 'monitor:pv_tab_disp', 'monitor:storage_sys', 'monitor:storage_eff', 'monitor:storage_voltage', 'monitor:storage_temp', 'monitor:storage_cell_v', 'monitor:storage_cell_temp', 'monitor:storage_topo', 'monitor:ev_sys',
+      'alarm:fault', 'alarm:dev', 'alarm:event',
+      'report:elec', 'report:elec_gen', 'report:revenue', 'report:rev_total', 'report:rev_total_export', 'report:rev_pv', 'report:rev_pv_export', 'report:rev_storage', 'report:rev_storage_export', 'report:rev_ev', 'report:rev_ev_export',
+      'smart:strategy_run', 'smart:ai_light', 'smart:biz_analysis', 'smart:biz_export', 'smart:dev_diag', 'smart:dev_diag_export', 'smart:ai_dispatch', 'smart:ai_dispatch_export',
+      'strategy:config', 'strategy:tab_common', 'strategy:edit_common', 'strategy:tab_arbitrage', 'strategy:tab_dynamic', 'strategy:tab_transformer', 'strategy:edit_transformer', 'strategy:tab_demand', 'strategy:tab_self', 'strategy:surplus_grid', 'strategy:reverse_flow_param', 'strategy:ai_param', 'strategy:demand_mode',
+      'strategy:run', 'strategy:combo_del', 'strategy:combo_edit', 'strategy:combo_add', 'strategy:batch_apply', 'strategy:tab_combo', 'strategy:tab_schedule', 'strategy:capacity_reserve', 'strategy:period_add', 'strategy:custom_strategy', 'strategy:ai_dispatch', 'strategy:light_strategy', 'strategy:ai_switch',
+      'strategy:light_smart', 'strategy:light_edit', 'strategy:light_switch',
+      'grid:site', 'grid:site_view', 'grid:site_del', 'grid:site_edit', 'grid:site_add',
+      'grid:device', 'grid:device_view', 'grid:device_del', 'grid:device_edit', 'grid:device_add', 'grid:transformer_sub_add',
+      'grid:topo', 'grid:topo_view', 'grid:topo_apply', 'grid:topo_edit',
+      'grid:price', 'grid:buy_view', 'grid:buy_del', 'grid:buy_edit', 'grid:buy_add', 'grid:buy_tab', 'grid:sell_tab', 'grid:sell_edit', 'grid:ev_sell_tab', 'grid:ev_sell_add', 'grid:ev_sell_edit', 'grid:ev_sell_del',
+      'grid:metrics', 'grid:metrics_pv', 'grid:metrics_storage',
+      'grid:demand_response', 'grid:demand_add', 'grid:demand_edit', 'grid:demand_del',
+      'grid:schedule_mgt', 'grid:schedule_add', 'grid:schedule_edit', 'grid:schedule_del',
+      'log:operation', 'log:exception'
+    ],
+    createdAt: '2026-07-10 16:00'
+  }
+];
+
+export const INITIAL_FEATURE_PACKS: FeaturePack[] = [
+  {
+    id: 'FP1',
+    name: '多级变压器',
+    code: 'multi-transformer',
+    category: 'architecture',
+    description: '支持多层级变压器拓扑关系建立，在设备管理中增加二级变压器新增与统计。',
+    order: 1,
+    permissions: ['grid:transformer_sub_add'],
+    createdAt: '2026-06-12 11:30'
+  },
+  {
+    id: 'FP2',
+    name: 'AI排程',
+    code: 'ai-scheduler',
+    category: 'strategy',
+    description: '智能AI排程，支持在排期中应用AI调度，结合光伏与负荷预测进行决策。',
+    order: 2,
+    permissions: ['strategy:ai_dispatch', 'strategy:ai_switch'],
+    createdAt: '2026-06-15 09:00'
+  },
+  {
+    id: 'FP3',
+    name: 'AI调度',
+    code: 'ai-dispatch',
+    category: 'strategy',
+    description: '高维度AI调度报告与策略执行，结合天气及运行实绩给出建议。',
+    order: 3,
+    permissions: ['strategy:ai_dispatch', 'smart:ai_dispatch'],
+    createdAt: '2026-06-16 14:00'
+  },
+  {
+    id: 'FP4',
+    name: '峰谷套利',
+    code: 'peak-valley',
+    category: 'strategy',
+    description: '开通峰谷套利控制选项，在策略配置中启用专属配置标签页。',
+    order: 4,
+    permissions: ['strategy:tab_arbitrage'],
+    createdAt: '2026-06-18 10:00'
+  },
+  {
+    id: 'FP5',
+    name: '动态增容',
+    code: 'dynamic-capacity',
+    category: 'strategy',
+    description: '协调储能系统瞬时充放电，避免重载过载及容量费罚款。',
+    order: 5,
+    permissions: ['strategy:tab_dynamic'],
+    createdAt: '2026-06-20 15:30'
+  },
+  {
+    id: 'FP6',
+    name: '需量控制',
+    code: 'demand-control',
+    category: 'strategy',
+    description: '提供需量状态预测及异常限制，允许切换需量更新模式。',
+    order: 6,
+    permissions: ['strategy:tab_demand', 'strategy:demand_mode'],
+    createdAt: '2026-06-22 17:00'
+  },
+  {
+    id: 'FP7',
+    name: '余电上网',
+    code: 'surplus-grid',
+    category: 'strategy',
+    description: '允许在峰值或特定时段将富余电量上报电网以增加电站收益。',
+    order: 7,
+    permissions: ['strategy:surplus_grid'],
+    createdAt: '2026-06-23 10:00'
+  },
+  {
+    id: 'FP8',
+    name: '轻智能',
+    code: 'light-smart',
+    category: 'strategy',
+    description: '支持AI轻智能开关与参数快捷自适应，提升运行效能。',
+    order: 8,
+    permissions: ['strategy:light_smart', 'strategy:light_edit', 'strategy:light_switch'],
+    createdAt: '2026-06-24 11:00'
+  },
+  {
+    id: 'FP9',
+    name: '监控大屏',
+    code: 'monitoring-screen',
+    category: 'basic',
+    description: '开通精美的多端适配可视化大屏及天合储能专用监控大屏。',
+    order: 9,
+    permissions: ['dash:screen'],
+    createdAt: '2026-07-02 08:30'
+  },
+  {
+    id: 'FP10',
+    name: '自动电价同步',
+    code: 'price-sync',
+    category: 'basic',
+    description: '自动同步电力交易中心的售电/购电分时电价。',
+    order: 10,
+    permissions: ['grid:sell_tab', 'grid:sell_edit'],
+    createdAt: '2026-07-03 09:00'
+  },
+  {
+    id: 'FP11',
+    name: '智能报告',
+    code: 'smart-reports',
+    category: 'strategy',
+    description: '开通深度经营分析、运行报告与设备诊断大报告。',
+    order: 11,
+    permissions: ['smart:biz_analysis', 'smart:dev_diag'],
+    createdAt: '2026-07-04 10:30'
+  },
+  {
+    id: 'FP12',
+    name: '需求响应',
+    code: 'demand-response',
+    category: 'strategy',
+    description: '支持响应电网或调度中心的削峰填谷指令以获取辅助服务补偿。',
+    order: 12,
+    permissions: ['grid:demand_response', 'grid:demand_add', 'grid:demand_edit', 'grid:demand_del'],
+    createdAt: '2026-07-05 13:00'
+  },
+  {
+    id: 'FP13',
+    name: '排班管理',
+    code: 'schedule-management',
+    category: 'strategy',
+    description: '提供针对现场值守或特定策略周期的自动与人工排班运维机制。',
+    order: 13,
+    permissions: ['grid:schedule_mgt', 'grid:schedule_add', 'grid:schedule_edit', 'grid:schedule_del'],
+    createdAt: '2026-07-06 15:00'
+  }
+];
+
+export const INITIAL_ENTERPRISES: EnterpriseAssign[] = [
+  {
+    id: 'E1',
+    name: '天合富家能源股份有限公司',
+    baseVersionId: 'standard',
+    validityStart: '2026-01-01',
+    validityEnd: '2026-12-31',
+    features: []
+  },
+  {
+    id: 'E2',
+    name: '天合富家演示',
+    baseVersionId: 'test-version',
+    validityStart: '2026-01-01',
+    validityEnd: '2027-01-01',
+    features: [
+      { featureId: 'ai-scheduler', startDate: '2026-01-01', endDate: '2027-01-01', status: 'active' },
+      { featureId: 'peak-valley', startDate: '2026-01-01', endDate: '2027-01-01', status: 'active' },
+      { featureId: 'demand-control', startDate: '2026-01-01', endDate: '2027-01-01', status: 'active' },
+      { featureId: 'monitoring-screen', startDate: '2026-01-01', endDate: '2027-01-01', status: 'active' }
+    ]
+  },
+  {
+    id: 'E3',
+    name: '微网验证企业',
+    baseVersionId: 'test-version',
+    validityStart: '2026-03-15',
+    validityEnd: '2027-03-15',
+    features: [
+      { featureId: 'multi-transformer', startDate: '2026-03-15', endDate: '2027-03-15', status: 'active' }
+    ]
+  },
+  {
+    id: 'E4',
+    name: '河北泽熙新能源有限公司',
+    baseVersionId: 'standard',
+    validityStart: '2026-05-01',
+    validityEnd: '2026-12-31',
+    features: []
+  },
+  {
+    id: 'E5',
+    name: '常州益达利科技有限公司',
+    baseVersionId: 'standard',
+    validityStart: '2026-04-01',
+    validityEnd: '2027-04-01',
+    features: [
+      { featureId: 'monitoring-screen', startDate: '2026-04-01', endDate: '2027-04-01', status: 'active' }
+    ]
+  },
+  {
+    id: 'E6',
+    name: '烟台孚瑞克森汽车部件有限公司',
+    baseVersionId: 'standard',
+    validityStart: '2026-05-10',
+    validityEnd: '2027-05-10',
+    features: []
+  },
+  {
+    id: 'E7',
+    name: '山东潍坊世宇生物科技有限公司',
+    baseVersionId: 'trina-storage-ext',
+    validityStart: '2026-06-01',
+    validityEnd: '2027-06-01',
+    features: [
+      { featureId: 'peak-valley', startDate: '2026-06-01', endDate: '2027-06-01', status: 'active' }
+    ]
+  },
+  {
+    id: 'E8',
+    name: '河南洛阳福瑞可汽车零部件项目',
+    baseVersionId: 'trina-storage-ext',
+    validityStart: '2026-06-15',
+    validityEnd: '2027-06-15',
+    features: []
+  },
+  {
+    id: 'E9',
+    name: '江苏无锡宁宇包装有限公司',
+    baseVersionId: 'trina-storage-ext',
+    validityStart: '2026-06-20',
+    validityEnd: '2027-06-20',
+    features: []
+  },
+  {
+    id: 'E10',
+    name: '山东潍坊中国中药谷项目',
+    baseVersionId: 'trina-storage-ext',
+    validityStart: '2026-07-01',
+    validityEnd: '2027-07-01',
+    features: []
+  }
+];
+
+export const INITIAL_PUSH_RECORDS: PushRecord[] = [
+  {
+    id: 'P1001',
+    time: '2026-07-13 10:30',
+    content: '天合富家能源股份有限公司 基础版本分配为：标准版',
+    target: '零碳运营管理平台',
+    status: 'success',
+    payload: JSON.stringify({
+      enterprise: '天合富家能源股份有限公司',
+      action: 'UPDATE_BASE_VERSION',
+      baseVersionId: 'standard',
+      validity: '2026-01-01 ~ 2026-12-31',
+      activeFeatures: []
+    }, null, 2)
+  },
+  {
+    id: 'P1002',
+    time: '2026-07-12 14:28',
+    content: '微网验证企业 启用特性包：多级变压器',
+    target: '零碳运营管理平台',
+    status: 'success',
+    payload: JSON.stringify({
+      enterprise: '微网验证企业',
+      action: 'ENABLE_FEATURE',
+      featureCode: 'multi-transformer',
+      validity: '2026-03-15 ~ 2027-03-15'
+    }, null, 2)
+  },
+  {
+    id: 'P1003',
+    time: '2026-07-11 09:15',
+    content: '天合富家演示 开通特性包：AI排程、监控大屏',
+    target: '零碳运营管理平台',
+    status: 'success',
+    payload: JSON.stringify({
+      enterprise: '天合富家演示',
+      action: 'ENABLE_MULTIPLE_FEATURES',
+      featureCodes: ['ai-scheduler', 'monitoring-screen'],
+      validity: '2026-01-01 ~ 2027-01-01'
+    }, null, 2)
+  },
+  {
+    id: 'P1004',
+    time: '2026-07-10 16:00',
+    content: '河北泽熙新能源有限公司 分配版本：标准版 推送',
+    target: '零碳运营管理平台',
+    status: 'success',
+    payload: JSON.stringify({
+      enterprise: '河北泽熙新能源有限公司',
+      action: 'UPDATE_BASE_VERSION',
+      baseVersionId: 'standard',
+      validity: '2026-05-01 ~ 2026-12-31'
+    }, null, 2)
+  },
+  {
+    id: 'P1005',
+    time: '2026-07-09 11:20',
+    content: '常州益达利科技有限公司 启用特性包：监控大屏',
+    target: '零碳运营管理平台',
+    status: 'success',
+    payload: JSON.stringify({
+      enterprise: '常州益达利科技有限公司',
+      action: 'ENABLE_FEATURE',
+      featureCode: 'monitoring-screen',
+      validity: '2026-04-01 ~ 2027-04-01'
+    }, null, 2)
+  }
+];
+
 // --- Components ---
 
 export default function App() {
-  const [activeMenu, setActiveMenu] = useState('purchase-price');
+  const [activeMenu, setActiveMenu] = useState('enterprise');
   const [priceSubMenuOpen, setPriceSubMenuOpen] = useState(true);
+  const [versionFeatureSubMenuOpen, setVersionFeatureSubMenuOpen] = useState(true);
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedProvince, setSelectedProvince] = useState<Province | null>(null);
   const [selectedSalesPrice, setSelectedSalesPrice] = useState<SalesPrice | null>(null);
+
+  // Versions & Features State Management
+  const [versions, setVersions] = useState<Version[]>(INITIAL_VERSIONS);
+  const [featurePacks, setFeaturePacks] = useState<FeaturePack[]>(INITIAL_FEATURE_PACKS);
+  const [enterprises, setEnterprises] = useState<EnterpriseAssign[]>(INITIAL_ENTERPRISES);
+  const [pushRecords, setPushRecords] = useState<PushRecord[]>(INITIAL_PUSH_RECORDS);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState('2026-07-13 11:00');
 
   const handleViewDetails = (province: Province) => {
     setSelectedProvince(province);
@@ -277,20 +990,21 @@ export default function App() {
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-800">
       {/* Sidebar */}
-      <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
+      <div className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
         <div className="h-14 flex items-center px-4 border-b border-gray-200">
           <div className="flex items-center text-blue-600 font-bold text-lg">
-            <div className="w-6 h-6 bg-blue-600 rounded-md mr-2 flex items-center justify-center">
+            <div className="w-6 h-6 bg-blue-600 rounded-md mr-2 flex items-center justify-center shadow-sm">
               <div className="w-3 h-3 bg-white rounded-sm"></div>
             </div>
             智能微网
           </div>
         </div>
-        <div className="p-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">主导航</div>
-        <nav className="flex-1 px-2 space-y-1">
-          <NavItem icon={<Building2 size={18} />} label="企业管理" active={activeMenu === 'enterprise'} onClick={() => navTo('enterprise')} />
-          <NavItem icon={<MapPin size={18} />} label="站点管理" active={activeMenu === 'site'} onClick={() => navTo('site')} />
-          <NavItem icon={<Server size={18} />} label="设备管理" active={activeMenu === 'device'} onClick={() => navTo('device')} />
+
+        <div className="p-3 text-[11px] font-bold text-gray-400 uppercase tracking-wider block">导航菜单</div>
+        <nav className="flex-1 px-2 space-y-1 overflow-y-auto pb-4">
+          <NavItem icon={<Building2 size={16} />} label="企业管理" active={activeMenu === 'enterprise'} onClick={() => navTo('enterprise')} />
+          <NavItem icon={<MapPin size={16} />} label="站点管理" active={activeMenu === 'site'} onClick={() => navTo('site')} />
+          <NavItem icon={<Server size={16} />} label="设备管理" active={activeMenu === 'device'} onClick={() => navTo('device')} />
           
           <div>
             <button
@@ -301,34 +1015,94 @@ export default function App() {
                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
               }`}
             >
-              <div className="flex items-center space-x-3">
-                <BadgeDollarSign size={18} />
+              <div className="flex items-center">
                 <span>电价管理</span>
               </div>
               <ChevronDown size={14} className={`transform transition-transform ${priceSubMenuOpen ? 'rotate-180' : ''}`} />
             </button>
             
             {priceSubMenuOpen && (
-              <div className="mt-1 ml-9 space-y-1">
+              <div className="mt-1 ml-4 space-y-1">
                 <button
                   onClick={() => navTo('purchase-price')}
-                  className={`w-full flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${
+                  className={`w-full flex items-center px-3 py-1.5 rounded-md text-xs transition-colors text-left ${
                     activeMenu === 'purchase-price' 
-                      ? 'text-blue-600 font-medium' 
-                      : 'text-gray-500 hover:text-gray-900'
+                      ? 'text-blue-600 font-semibold bg-blue-50/50' 
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50/30'
                   }`}
                 >
                   购电电价管理
                 </button>
                 <button
                   onClick={() => navTo('sales-price')}
-                  className={`w-full flex items-center px-3 py-1.5 rounded-md text-sm transition-colors ${
+                  className={`w-full flex items-center px-3 py-1.5 rounded-md text-xs transition-colors text-left ${
                     activeMenu === 'sales-price' 
-                      ? 'text-blue-600 font-medium' 
-                      : 'text-gray-500 hover:text-gray-900'
+                      ? 'text-blue-600 font-semibold bg-blue-50/50' 
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50/30'
                   }`}
                 >
                   售电价格管理
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2">
+            <button
+              onClick={() => setVersionFeatureSubMenuOpen(!versionFeatureSubMenuOpen)}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                ['version-manage', 'feature-manage', 'enterprise-assign', 'permission-directory'].includes(activeMenu)
+                  ? 'bg-blue-50 text-blue-600 font-bold' 
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              <div className="flex items-center">
+                <span>版本特性管理</span>
+              </div>
+              <ChevronDown size={14} className={`transform transition-transform ${versionFeatureSubMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {versionFeatureSubMenuOpen && (
+              <div className="mt-1 ml-4 space-y-1">
+                <button
+                  onClick={() => navTo('version-manage')}
+                  className={`w-full flex items-center px-3 py-1.5 rounded-md text-xs transition-colors text-left ${
+                    activeMenu === 'version-manage' 
+                      ? 'text-blue-600 font-semibold bg-blue-50/50' 
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50/30'
+                  }`}
+                >
+                  版本管理
+                </button>
+                <button
+                  onClick={() => navTo('feature-manage')}
+                  className={`w-full flex items-center px-3 py-1.5 rounded-md text-xs transition-colors text-left ${
+                    activeMenu === 'feature-manage' 
+                      ? 'text-blue-600 font-semibold bg-blue-50/50' 
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50/30'
+                  }`}
+                >
+                  特性包管理
+                </button>
+                <button
+                  onClick={() => navTo('enterprise-assign')}
+                  className={`w-full flex items-center px-3 py-1.5 rounded-md text-xs transition-colors text-left ${
+                    activeMenu === 'enterprise-assign' 
+                      ? 'text-blue-600 font-semibold bg-blue-50/50' 
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50/30'
+                  }`}
+                >
+                  企业版本分配
+                </button>
+                <button
+                  onClick={() => navTo('permission-directory')}
+                  className={`w-full flex items-center px-3 py-1.5 rounded-md text-xs transition-colors text-left ${
+                    activeMenu === 'permission-directory' 
+                      ? 'text-blue-600 font-semibold bg-blue-50/50' 
+                      : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50/30'
+                  }`}
+                >
+                  权限目录
                 </button>
               </div>
             )}
@@ -339,17 +1113,27 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6">
-          <div className="flex items-center space-x-2 text-sm">
-            <span className="text-gray-500">当前位置：</span>
-            <span className="text-gray-500">电价管理</span>
-            <span className="text-gray-400">/</span>
-            <span className="font-medium">
-              {activeMenu === 'purchase-price' ? '购电电价管理' : activeMenu === 'sales-price' ? '售电价格管理' : '其他模块'}
+        <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 shadow-sm z-10">
+          <div className="flex items-center space-x-2 text-xs">
+            <span className="text-gray-400">当前位置：</span>
+            <span className="text-gray-600 font-medium">
+              🔧 微网管理后台
+            </span>
+            <span className="text-gray-300">/</span>
+            <span className="font-semibold text-gray-800">
+              {activeMenu === 'purchase-price' ? '购电电价管理' :
+               activeMenu === 'sales-price' ? '售电价格管理' :
+               activeMenu === 'version-manage' ? '版本管理' :
+               activeMenu === 'feature-manage' ? '特性包管理' :
+               activeMenu === 'enterprise-assign' ? '企业版本分配' :
+               activeMenu === 'permission-directory' ? '权限目录' :
+               activeMenu === 'site' ? '站点管理' :
+               activeMenu === 'device' ? '设备管理' :
+               activeMenu === 'enterprise' ? '企业管理' : '后台模块'}
             </span>
             {view === 'detail' && (selectedProvince || selectedSalesPrice) && (
               <>
-                <span className="text-gray-400">/</span>
+                <span className="text-gray-300">/</span>
                 <span className="font-medium text-blue-600">
                   {selectedProvince ? selectedProvince.priceName : selectedSalesPrice?.level1Region}详情
                 </span>
@@ -370,7 +1154,7 @@ export default function App() {
         </header>
 
         {/* Content Area */}
-        <main className="flex-1 overflow-auto bg-gray-50 p-6">
+        <main className="flex-1 overflow-auto bg-gray-50 p-6 relative">
           {activeMenu === 'purchase-price' ? (
             view === 'list' ? (
               <PriceList onViewDetails={handleViewDetails} />
@@ -383,8 +1167,37 @@ export default function App() {
             ) : (
               <SalesPriceDetail salesPrice={selectedSalesPrice!} onBack={handleBack} />
             )
-          ) : activeMenu === 'site' ? (
-            <StationManagement />
+          ) : ['enterprise', 'site', 'device', 'device-apply', 'topo'].includes(activeMenu) ? (
+            <GridWorkspaceContainer 
+              activeTab={activeMenu}
+              setActiveTab={setActiveMenu}
+            />
+          ) : activeMenu === 'version-manage' ? (
+            <VersionManagePanel 
+              versions={versions} 
+              setVersions={setVersions} 
+            />
+          ) : activeMenu === 'feature-manage' ? (
+            <FeatureManagePanel 
+              featurePacks={featurePacks} 
+              setFeaturePacks={setFeaturePacks} 
+            />
+          ) : activeMenu === 'enterprise-assign' ? (
+            <EnterpriseAssignPanel 
+              enterprises={enterprises} 
+              setEnterprises={setEnterprises} 
+              versions={versions}
+              featurePacks={featurePacks}
+              pushRecords={pushRecords}
+              setPushRecords={setPushRecords}
+            />
+          ) : activeMenu === 'permission-directory' ? (
+            <PermissionDirectoryPanel 
+              isSyncing={isSyncing} 
+              setIsSyncing={setIsSyncing}
+              lastSyncTime={lastSyncTime}
+              setLastSyncTime={setLastSyncTime}
+            />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-400">
               请选择左侧菜单查看功能
@@ -396,17 +1209,16 @@ export default function App() {
   );
 }
 
-function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
+function NavItem({ icon, label, active, onClick }: { icon?: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+      className={`w-full flex items-center px-3 py-2 rounded-md text-sm transition-all ${
         active 
-          ? 'bg-blue-50 text-blue-600' 
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+          ? 'bg-blue-50 text-blue-600 font-bold' 
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium'
       }`}
     >
-      {icon}
       <span>{label}</span>
     </button>
   );
@@ -439,14 +1251,12 @@ function SalesPriceList({ onViewDetails }: { onViewDetails: (s: SalesPrice) => v
           </div>
           <div className="flex space-x-3">
             <button className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition-colors flex items-center">
-              <Search size={14} className="mr-1.5" />
               查询
             </button>
             <button 
               onClick={() => setFilterRegion('')}
               className="px-4 py-1.5 bg-white border border-blue-600 text-blue-600 rounded text-sm font-medium hover:bg-blue-50 transition-colors flex items-center"
             >
-              <RotateCcw size={14} className="mr-1.5" />
               重置
             </button>
           </div>
@@ -949,6 +1759,10 @@ function SalesPriceDetail({ salesPrice, onBack }: { salesPrice: SalesPrice, onBa
 }
 
 function StationManagement() {
+  return null;
+}
+
+function OldStationManagement() {
   const [stations, setStations] = useState<Station[]>(STATIONS);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingStation, setEditingStation] = useState<Station | null>(null);
@@ -1032,14 +1846,12 @@ function StationManagement() {
         </div>
         <div className="mt-4 flex justify-end space-x-3">
           <button className="px-5 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 shadow-sm flex items-center">
-            <Search size={14} className="mr-1.5" />
             搜索
           </button>
           <button 
             onClick={() => { setFilterId(''); setFilterName(''); setFilterEnterprise(''); setFilterPhone(''); }}
             className="px-5 py-1.5 bg-white border border-gray-300 text-gray-600 rounded text-sm font-medium hover:bg-gray-50 flex items-center"
           >
-            <RotateCcw size={14} className="mr-1.5" />
             重置
           </button>
         </div>
@@ -1520,7 +2332,6 @@ function PriceList({ onViewDetails }: { onViewDetails: (p: Province) => void }) 
             <button 
               className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition-colors flex items-center"
             >
-              <Search size={14} className="mr-1.5" />
               搜索
             </button>
             <button 
@@ -1533,7 +2344,6 @@ function PriceList({ onViewDetails }: { onViewDetails: (p: Province) => void }) 
               }}
               className="px-4 py-1.5 bg-white border border-blue-600 text-blue-600 rounded text-sm font-medium hover:bg-blue-50 transition-colors flex items-center"
             >
-              <RotateCcw size={14} className="mr-1.5" />
               重置
             </button>
           </div>
@@ -2826,3 +3636,2210 @@ function FormulaConfigTab({ params, configs, setConfigs }: { params: Record<stri
     </div>
   );
 }
+
+// ==========================================
+// --- Version & Feature management subcomponents ---
+// ==========================================
+
+// --- Global Perm Checklist helper ---
+interface PermissionSelectionTreeProps {
+  selectedPerms: string[];
+  onChange: (perms: string[]) => void;
+  searchQuery?: string;
+}
+
+function PermissionSelectionTree({ selectedPerms, onChange, searchQuery = '' }: PermissionSelectionTreeProps) {
+  const filteredPermissions = useMemo(() => {
+    if (!searchQuery) return ALL_PERMISSIONS;
+    return ALL_PERMISSIONS.map(cat => ({
+      ...cat,
+      items: cat.items.filter(item => 
+        item.name.includes(searchQuery) || item.code.includes(searchQuery)
+      )
+    })).filter(cat => cat.items.length > 0);
+  }, [searchQuery]);
+
+  const handleCategoryToggle = (categoryName: string, items: PermissionItem[]) => {
+    const itemCodes = items.map(i => i.code);
+    const allSelected = itemCodes.every(code => selectedPerms.includes(code));
+    
+    if (allSelected) {
+      // Unselect all in category
+      onChange(selectedPerms.filter(code => !itemCodes.includes(code)));
+    } else {
+      // Select all in category (avoid duplicates)
+      const otherPerms = selectedPerms.filter(code => !itemCodes.includes(code));
+      onChange([...otherPerms, ...itemCodes]);
+    }
+  };
+
+  const handleItemToggle = (code: string) => {
+    if (selectedPerms.includes(code)) {
+      onChange(selectedPerms.filter(c => c !== code));
+    } else {
+      onChange([...selectedPerms, code]);
+    }
+  };
+
+  return (
+    <div className="space-y-4 max-h-[350px] overflow-auto border border-gray-200 rounded p-3 bg-gray-50/50">
+      {filteredPermissions.map(cat => {
+        const catCodes = cat.items.map(i => i.code);
+        const allChecked = catCodes.every(code => selectedPerms.includes(code));
+        const someChecked = catCodes.some(code => selectedPerms.includes(code)) && !allChecked;
+
+        return (
+          <div key={cat.category} className="border-b border-gray-100 last:border-b-0 pb-3 mb-3 last:mb-0 last:pb-0">
+            <div className="flex items-center mb-2 bg-gray-100/60 p-1.5 rounded">
+              <input
+                type="checkbox"
+                id={`cat-${cat.category}`}
+                checked={allChecked}
+                ref={el => {
+                  if (el) el.indeterminate = someChecked;
+                }}
+                onChange={() => handleCategoryToggle(cat.category, cat.items)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+              />
+              <label htmlFor={`cat-${cat.category}`} className="ml-2 text-xs font-bold text-gray-700 cursor-pointer select-none">
+                📁 {cat.category} ({cat.items.length}项)
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pl-6">
+              {cat.items.map(item => {
+                const checked = selectedPerms.includes(item.code);
+                return (
+                  <label key={item.code} className={`flex items-center p-1.5 rounded border text-xs cursor-pointer select-none transition-colors ${checked ? 'border-blue-200 bg-blue-50/30' : 'border-gray-200 hover:bg-gray-50 bg-white'}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => handleItemToggle(item.code)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                    />
+                    <div className="ml-2 flex flex-col">
+                      <span className="font-medium text-gray-800">{item.name}</span>
+                      <span className="text-[10px] font-mono text-gray-400">{item.code}</span>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
+// ==========================================
+// 1. 版本管理 (VersionManagePanel)
+// ==========================================
+interface VersionManagePanelProps {
+  versions: Version[];
+  setVersions: React.Dispatch<React.SetStateAction<Version[]>>;
+}
+
+function VersionManagePanel({ versions, setVersions }: VersionManagePanelProps) {
+  const [expandedVersionId, setExpandedVersionId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingVersion, setEditingVersion] = useState<Version | null>(null);
+  const [permSearch, setPermSearch] = useState('');
+
+  // Form Fields
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [order, setOrder] = useState<number>(1);
+  const [description, setDescription] = useState('');
+  const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const openCreateModal = () => {
+    setEditingVersion(null);
+    setName('');
+    setCode('');
+    setOrder(versions.length + 1);
+    setDescription('');
+    setSelectedPerms([]);
+    setErrorMsg('');
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (v: Version) => {
+    setEditingVersion(v);
+    setName(v.name);
+    setCode(v.code);
+    setOrder(v.order);
+    setDescription(v.description);
+    setSelectedPerms(v.permissions);
+    setErrorMsg('');
+    setIsModalOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!name || !code) {
+      setErrorMsg('版本名称和编码为必填项');
+      return;
+    }
+
+    const isDuplicateCode = versions.some(v => v.code === code && (!editingVersion || v.id !== editingVersion.id));
+    if (isDuplicateCode) {
+      setErrorMsg('版本编码已存在，请勿重复创建');
+      return;
+    }
+
+    if (editingVersion) {
+      // Edit
+      setVersions(prev => prev.map(v => v.id === editingVersion.id ? {
+        ...v,
+        name,
+        code,
+        order,
+        description,
+        permissions: selectedPerms
+      } : v));
+    } else {
+      // Create
+      const newV: Version = {
+        id: `V${Date.now().toString().slice(-4)}`,
+        name,
+        code,
+        order,
+        description,
+        permissions: selectedPerms,
+        createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16)
+      };
+      setVersions(prev => [...prev, newV].sort((a,b) => a.order - b.order));
+    }
+
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('确认删除此版本？删除后不可恢复。')) {
+      setVersions(prev => prev.filter(v => v.id !== id));
+    }
+  };
+
+  return (
+    <div className="space-y-4 text-xs">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-base font-bold text-gray-950">版本管理</h2>
+          <p className="text-[11px] text-gray-500">创建、编辑并排序系统基础版本权限配置</p>
+        </div>
+        <button 
+          onClick={openCreateModal}
+          className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center shadow-sm cursor-pointer"
+        >
+          <Plus size={14} className="mr-1" />
+          新建版本
+        </button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">排序</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">版本名称</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">版本编码</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">关联权限数</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">说明</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">创建时间</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {versions.map(v => {
+              const isExpanded = expandedVersionId === v.id;
+              const menuCount = ALL_PERMISSIONS.filter(cat => 
+                cat.items.some(i => v.permissions.includes(i.code))
+              ).length;
+              const buttonCount = v.permissions.length;
+
+              return (
+                <React.Fragment key={v.id}>
+                  <tr className="hover:bg-gray-50/70 transition-colors">
+                    <td className="px-4 py-3 text-xs font-mono font-bold text-gray-500">{v.order}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-bold text-gray-900">{v.name}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 font-mono text-[10px] rounded font-semibold">{v.code}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button 
+                        onClick={() => setExpandedVersionId(isExpanded ? null : v.id)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center hover:underline focus:outline-none"
+                      >
+                        {menuCount}项主菜单 / {buttonCount}个动作权限
+                        <ChevronRight size={12} className={`ml-1 transform transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 max-w-xs truncate text-xs text-gray-500" title={v.description}>
+                      {v.description}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400 font-mono">{v.createdAt}</td>
+                    <td className="px-4 py-3 text-right space-x-3">
+                      <button onClick={() => openEditModal(v)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">编辑</button>
+                      <button onClick={() => handleDelete(v.id)} className="text-xs text-red-600 hover:text-red-800 font-semibold">删除</button>
+                    </td>
+                  </tr>
+
+                  {isExpanded && (
+                    <tr className="bg-gray-50/40">
+                      <td colSpan={7} className="px-6 py-3 border-l-4 border-blue-500">
+                        <div className="space-y-2">
+                          <h4 className="text-[11px] font-bold text-gray-700">关联的权限列表：</h4>
+                          <div className="flex flex-wrap gap-1.5">
+                            {v.permissions.length === 0 ? (
+                              <span className="text-xs text-gray-400 italic">暂无分配权限</span>
+                            ) : (
+                              v.permissions.map(code => {
+                                const matchedItem = ALL_PERMISSIONS.flatMap(cat => cat.items).find(i => i.code === code);
+                                return (
+                                  <span key={code} className="inline-flex flex-col px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px] shadow-sm">
+                                    <span className="font-bold text-gray-800">{matchedItem?.name || code}</span>
+                                    <span className="font-mono text-gray-400 text-[8px]">{code}</span>
+                                  </span>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Drawer Dialog */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex justify-end z-50">
+          <div className="w-[500px] bg-white h-full shadow-2xl flex flex-col">
+            <div className="p-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-gray-800 text-sm">
+                {editingVersion ? `📝 编辑版本：${editingVersion.name}` : '➕ 新建版本'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto space-y-4">
+              {errorMsg && (
+                <div className="p-2.5 bg-red-50 text-red-600 text-[11px] rounded border border-red-200 flex items-center">
+                  <AlertTriangle size={12} className="mr-2 shrink-0" />
+                  {errorMsg}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">版本名称 <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text" 
+                    placeholder="如：标准版"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">唯一编码 (不可重复) <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text" 
+                    placeholder="如：standard"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">排序优先级</label>
+                  <input 
+                    type="number" 
+                    value={order}
+                    onChange={(e) => setOrder(parseInt(e.target.value) || 1)}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">描述信息</label>
+                <textarea 
+                  rows={2}
+                  placeholder="请输入对该版本的说明"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                />
+              </div>
+
+              <div className="border-t border-gray-100 pt-3">
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-[11px] font-bold text-gray-850">
+                    权限配置 <span className="text-gray-400 font-normal">(勾选关联权限)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="检索权限..."
+                    value={permSearch}
+                    onChange={(e) => setPermSearch(e.target.value)}
+                    className="border border-gray-300 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 w-36 bg-white"
+                  />
+                </div>
+
+                <PermissionSelectionTree 
+                  selectedPerms={selectedPerms} 
+                  onChange={setSelectedPerms}
+                  searchQuery={permSearch}
+                />
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex justify-end space-x-2 shrink-0">
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="px-3 py-1.5 border border-gray-300 rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={handleSave}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-sm transition-colors"
+              >
+                保存版本
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ==========================================
+// 2. 特性包管理 (FeatureManagePanel)
+// ==========================================
+interface FeatureManagePanelProps {
+  featurePacks: FeaturePack[];
+  setFeaturePacks: React.Dispatch<React.SetStateAction<FeaturePack[]>>;
+}
+
+function FeatureManagePanel({ featurePacks, setFeaturePacks }: FeatureManagePanelProps) {
+  const [activeTab, setActiveTab] = useState<'all' | 'architecture' | 'strategy' | 'basic'>('all');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingPack, setEditingPack] = useState<FeaturePack | null>(null);
+  const [permSearch, setPermSearch] = useState('');
+
+  // Form Fields
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [category, setCategory] = useState<'architecture' | 'strategy' | 'basic'>('strategy');
+  const [description, setDescription] = useState('');
+  const [order, setOrder] = useState<number>(1);
+  const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const filteredPacks = featurePacks.filter(p => activeTab === 'all' || p.category === activeTab);
+
+  const openCreateModal = () => {
+    setEditingPack(null);
+    setName('');
+    setCode('');
+    setCategory('strategy');
+    setDescription('');
+    setOrder(featurePacks.length + 1);
+    setSelectedPerms([]);
+    setErrorMsg('');
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (p: FeaturePack) => {
+    setEditingPack(p);
+    setName(p.name);
+    setCode(p.code);
+    setCategory(p.category);
+    setDescription(p.description);
+    setOrder(p.order);
+    setSelectedPerms(p.permissions);
+    setErrorMsg('');
+    setIsModalOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!name || !code) {
+      setErrorMsg('特性包名称和编码为必填项');
+      return;
+    }
+
+    const isDuplicateCode = featurePacks.some(p => p.code === code && (!editingPack || p.id !== editingPack.id));
+    if (isDuplicateCode) {
+      setErrorMsg('此特性编码已存在，请更换');
+      return;
+    }
+
+    if (editingPack) {
+      setFeaturePacks(prev => prev.map(p => p.id === editingPack.id ? {
+        ...p,
+        name,
+        code,
+        category,
+        description,
+        order,
+        permissions: selectedPerms
+      } : p));
+    } else {
+      const newPack: FeaturePack = {
+        id: `FP${Date.now().toString().slice(-4)}`,
+        name,
+        code,
+        category,
+        description,
+        order,
+        permissions: selectedPerms,
+        createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16)
+      };
+      setFeaturePacks(prev => [...prev, newPack].sort((a,b) => a.order - b.order));
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('是否要删除该特性包？')) {
+      setFeaturePacks(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  return (
+    <div className="space-y-4 text-xs">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-base font-bold text-gray-950">特性包管理</h2>
+          <p className="text-[11px] text-gray-500">创建并归类微网增值高级特性功能</p>
+        </div>
+        <button 
+          onClick={openCreateModal}
+          className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center shadow-sm cursor-pointer"
+        >
+          <Plus size={14} className="mr-1" />
+          新建特性包
+        </button>
+      </div>
+
+      {/* Tabs Filter */}
+      <div className="flex space-x-2 border-b border-gray-200">
+        {[
+          { key: 'all', label: '全部特性' },
+          { key: 'architecture', label: '🏢 架构能力' },
+          { key: 'strategy', label: '💡 策略类' },
+          { key: 'basic', label: '🛠 基础服务' }
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key as any)}
+            className={`px-3 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+              activeTab === tab.key 
+                ? 'border-blue-600 text-blue-600 font-bold' 
+                : 'border-transparent text-gray-500 hover:text-gray-850'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Grid of Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {filteredPacks.map(pack => {
+          const catColors = {
+            architecture: { bg: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500', name: '架构能力' },
+            strategy: { bg: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500', name: '策略类' },
+            basic: { bg: 'bg-cyan-50 text-cyan-700 border-cyan-200', dot: 'bg-cyan-500', name: '基础服务' }
+          }[pack.category];
+
+          const matchedPermissions = pack.permissions.map(code => 
+            ALL_PERMISSIONS.flatMap(cat => cat.items).find(i => i.code === code)?.name || code
+          );
+
+          return (
+            <div 
+              key={pack.id} 
+              className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col justify-between"
+            >
+              <div className="space-y-2.5">
+                <div className="flex justify-between items-start">
+                  <h3 className="font-bold text-gray-900 text-xs leading-tight">{pack.name}</h3>
+                  <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold flex items-center ${catColors.bg}`}>
+                    <span className={`w-1 h-1 rounded-full mr-1 ${catColors.dot}`} />
+                    {catColors.name}
+                  </span>
+                </div>
+                
+                <p className="text-[11px] text-gray-500 line-clamp-2 h-7" title={pack.description}>
+                  {pack.description}
+                </p>
+
+                <div className="space-y-1.5 border-t border-gray-100 pt-2 text-[10px]">
+                  <div className="flex justify-between text-gray-400">
+                    <span>编码: <span className="font-mono text-gray-600 font-semibold">{pack.code}</span></span>
+                    <span>关联权限: <span className="text-gray-700 font-bold">{pack.permissions.length}个</span></span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 max-h-[36px] overflow-hidden">
+                    {matchedPermissions.slice(0, 3).map((name, i) => (
+                      <span key={i} className="px-1.5 py-0.5 bg-gray-50 border border-gray-100 rounded text-[9px] text-gray-500 font-medium">
+                        {name}
+                      </span>
+                    ))}
+                    {matchedPermissions.length > 3 && (
+                      <span className="px-1.5 py-0.5 bg-gray-50 text-[9px] text-gray-400">
+                        +{matchedPermissions.length - 3}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2.5 mt-2.5 border-t border-gray-50">
+                <button 
+                  onClick={() => openEditModal(pack)}
+                  className="px-2.5 py-0.5 border border-gray-200 rounded text-[11px] text-gray-600 font-semibold hover:bg-gray-50 transition-colors"
+                >
+                  配置编辑
+                </button>
+                <button 
+                  onClick={(e) => handleDelete(pack.id, e)}
+                  className="p-1 text-red-600 hover:text-red-800 rounded transition-colors"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {filteredPacks.length === 0 && (
+          <div className="col-span-full py-12 bg-white border border-gray-200 rounded-lg text-center">
+            <Package size={28} className="mx-auto text-gray-300 mb-2" />
+            <p className="text-gray-500 text-xs font-medium">该分类下暂无特性包，点击右上角新建</p>
+          </div>
+        )}
+      </div>
+
+      {/* Drawer Dialog */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex justify-end z-50">
+          <div className="w-[500px] bg-white h-full shadow-2xl flex flex-col">
+            <div className="p-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-gray-800 text-sm">
+                {editingPack ? `📝 编辑特性包：${editingPack.name}` : '📦 新建高级特性包'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto space-y-4">
+              {errorMsg && (
+                <div className="p-2.5 bg-red-50 text-red-600 text-[11px] rounded border border-red-200 flex items-center">
+                  <AlertTriangle size={12} className="mr-2" />
+                  {errorMsg}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">特性包名称 <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text" 
+                    placeholder="如：AI排程"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">特性编码 (不可重复) <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text" 
+                    placeholder="如：ai-scheduler"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">所属分类</label>
+                  <select 
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as any)}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="architecture">🏢 架构能力 (设备及物理层拓扑)</option>
+                    <option value="strategy">💡 策略类 (储能控制、AI调度优化)</option>
+                    <option value="basic">🛠 基础服务 (数据自动化、第三方对接)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">排序优先级</label>
+                  <input 
+                    type="number" 
+                    value={order}
+                    onChange={(e) => setOrder(parseInt(e.target.value) || 1)}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">说明描述</label>
+                <textarea 
+                  rows={2}
+                  placeholder="简述该特性的功能与运行逻辑"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                />
+              </div>
+
+              <div className="border-t border-gray-100 pt-3">
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-[11px] font-bold text-gray-850">
+                    包含的功能权限 <span className="text-gray-400 font-normal">(当分配此包时用户开通的底层权限)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="检索权限..."
+                    value={permSearch}
+                    onChange={(e) => setPermSearch(e.target.value)}
+                    className="border border-gray-300 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 w-36 bg-white"
+                  />
+                </div>
+
+                <PermissionSelectionTree 
+                  selectedPerms={selectedPerms} 
+                  onChange={setSelectedPerms}
+                  searchQuery={permSearch}
+                />
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex justify-end space-x-2 shrink-0">
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="px-3 py-1.5 border border-gray-300 rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={handleSave}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-sm transition-colors"
+              >
+                保存特性
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ==========================================
+// 3. 企业版本分配 (EnterpriseAssignPanel)
+// ==========================================
+interface EnterpriseAssignPanelProps {
+  enterprises: EnterpriseAssign[];
+  setEnterprises: React.Dispatch<React.SetStateAction<EnterpriseAssign[]>>;
+  versions: Version[];
+  featurePacks: FeaturePack[];
+  pushRecords: PushRecord[];
+  setPushRecords: React.Dispatch<React.SetStateAction<PushRecord[]>>;
+}
+
+function EnterpriseAssignPanel({ enterprises, setEnterprises, versions, featurePacks, pushRecords, setPushRecords }: EnterpriseAssignPanelProps) {
+  const [search, setSearch] = useState('');
+  const [selectedEnt, setSelectedEnt] = useState<EnterpriseAssign | null>(null);
+  const [historyEnt, setHistoryEnt] = useState<EnterpriseAssign | null>(null);
+  const [selectedPayload, setSelectedPayload] = useState<string | null>(null);
+  
+  // Modals Visibility
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
+  const [isFeatureModalOpen, setIsFeatureModalOpen] = useState(false);
+
+  // Version form fields
+  const [verBaseId, setVerBaseId] = useState('');
+  const [verStart, setVerStart] = useState('');
+  const [verEnd, setVerEnd] = useState('');
+  const [isVerPermanent, setIsVerPermanent] = useState(false);
+
+  // Feature Configuration Temp State
+  const [configFeatures, setConfigFeatures] = useState<Record<string, { enabled: boolean; start: string; end: string }>>({});
+
+  const filteredEnts = enterprises.filter(e => e.name.includes(search));
+
+  const openVersionModal = (ent: EnterpriseAssign) => {
+    setSelectedEnt(ent);
+    setVerBaseId(ent.baseVersionId);
+    setVerStart(ent.validityStart);
+    setVerEnd(ent.validityEnd);
+    setIsVerPermanent(ent.validityEnd === '无限期');
+    setIsVersionModalOpen(true);
+  };
+
+  const handleSaveVersion = () => {
+    if (!selectedEnt) return;
+
+    const finalVerEnd = isVerPermanent ? '无限期' : verEnd;
+
+    setEnterprises(prev => prev.map(ent => ent.id === selectedEnt.id ? {
+      ...ent,
+      baseVersionId: verBaseId,
+      validityStart: verStart,
+      validityEnd: finalVerEnd
+    } : ent));
+
+    // Log a Push Record to Zero Carbon
+    const verName = versions.find(v => v.code === verBaseId)?.name || verBaseId;
+    const newRecord: PushRecord = {
+      id: `P${Date.now().toString().slice(-4)}`,
+      time: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      content: `${selectedEnt.name} 升级分配为[${verName}]`,
+      target: '零碳运营服务',
+      status: 'success',
+      payload: JSON.stringify({
+        enterprise: selectedEnt.name,
+        action: 'UPDATE_BASE_VERSION',
+        baseVersion: verBaseId,
+        validity: `${verStart} ~ ${finalVerEnd}`,
+        pushedAt: new Date().toISOString()
+      }, null, 2)
+    };
+    setPushRecords(prev => [newRecord, ...prev]);
+
+    setIsVersionModalOpen(false);
+  };
+
+  const openFeatureModal = (ent: EnterpriseAssign) => {
+    setSelectedEnt(ent);
+    const initialConfig: Record<string, { enabled: boolean; start: string; end: string }> = {};
+    
+    featurePacks.forEach(pack => {
+      const existing = ent.features.find(f => f.featureId === pack.code);
+      initialConfig[pack.code] = {
+        enabled: !!existing,
+        start: existing?.startDate || ent.validityStart,
+        end: existing?.endDate || ent.validityEnd
+      };
+    });
+
+    setConfigFeatures(initialConfig);
+    setIsFeatureModalOpen(true);
+  };
+
+  const handleSaveFeatures = () => {
+    if (!selectedEnt) return;
+
+    const newFeaturesList: EnterpriseFeature[] = [];
+    Object.entries(configFeatures).forEach(([code, rawData]) => {
+      const data = rawData as { enabled: boolean; start: string; end: string };
+      if (data.enabled) {
+        // Calculate status dynamically based on current date
+        const today = '2026-07-12'; // simulated current local date
+        let status: 'active' | 'warning' | 'expired' = 'active';
+        if (data.end === '无限期') {
+          status = 'active';
+        } else if (data.end < today) {
+          status = 'expired';
+        } else {
+          const endDateObj = new Date(data.end);
+          const todayDateObj = new Date(today);
+          const diffDays = Math.ceil((endDateObj.getTime() - todayDateObj.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays >= 0 && diffDays <= 7) {
+            status = 'warning';
+          }
+        }
+
+        newFeaturesList.push({
+          featureId: code,
+          startDate: data.start,
+          endDate: data.end,
+          status
+        });
+      }
+    });
+
+    setEnterprises(prev => prev.map(ent => ent.id === selectedEnt.id ? {
+      ...ent,
+      features: newFeaturesList
+    } : ent));
+
+    // Log push record
+    const newRecord: PushRecord = {
+      id: `P${Date.now().toString().slice(-4)}`,
+      time: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      content: `${selectedEnt.name} 特性包功能调整推送`,
+      target: '零碳运营服务',
+      status: 'success',
+      payload: JSON.stringify({
+        enterprise: selectedEnt.name,
+        action: 'RECONFIGURE_FEATURES',
+        activeFeatures: newFeaturesList.map(f => ({
+          code: f.featureId,
+          validity: `${f.startDate} ~ ${f.endDate}`
+        })),
+        pushedAt: new Date().toISOString()
+      }, null, 2)
+    };
+    setPushRecords(prev => [newRecord, ...prev]);
+
+    setIsFeatureModalOpen(false);
+  };
+
+  return (
+    <div className="space-y-4 text-xs">
+      <div>
+        <h2 className="text-base font-bold text-gray-950">企业版本分配</h2>
+        <p className="text-[11px] text-gray-500">为入驻企业分发系统等级并开通/截止特性功能权限</p>
+      </div>
+
+      {/* Filter and search */}
+      <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <span className="text-xs font-bold text-gray-600">搜索企业：</span>
+          <div className="relative">
+            <input 
+              type="text"
+              placeholder="输入企业名称关键字"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-7 pr-3 py-1 border border-gray-300 rounded text-xs w-48 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            />
+            <Search size={12} className="absolute left-2.5 top-2 text-gray-400" />
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-4 py-3.5 text-[11px] font-bold text-gray-500 uppercase">企业名称</th>
+              <th className="px-4 py-3.5 text-[11px] font-bold text-gray-500 uppercase">基础版本</th>
+              <th className="px-4 py-3.5 text-[11px] font-bold text-gray-500 uppercase">开通特性功能</th>
+              <th className="px-4 py-3.5 text-[11px] font-bold text-gray-500 uppercase">版本有效期</th>
+              <th className="px-4 py-3.5 text-[11px] font-bold text-gray-500 uppercase text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {filteredEnts.map(ent => {
+              const baseVer = versions.find(v => v.code === ent.baseVersionId);
+
+              return (
+                <tr key={ent.id} className="hover:bg-gray-50/70 transition-colors">
+                  <td className="px-4 py-3">
+                    <span className="text-xs font-bold text-gray-900">{ent.name}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex px-1.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded text-[10px] font-bold">
+                      🛡️ {baseVer?.name || ent.baseVersionId}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1 max-w-sm">
+                      {ent.features.length === 0 ? (
+                        <span className="text-xs text-gray-400 italic">尚未开通高级特性</span>
+                      ) : (
+                        ent.features.map(f => {
+                          const pack = featurePacks.find(p => p.code === f.featureId);
+                          const isWarning = f.status === 'warning';
+                          const isExpired = f.status === 'expired';
+                          return (
+                            <span 
+                              key={f.featureId}
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                isExpired 
+                                  ? 'bg-red-50 text-red-600 border-red-200' 
+                                  : isWarning 
+                                    ? 'bg-amber-50 text-amber-600 border-amber-200 animate-pulse'
+                                    : 'bg-green-50 text-green-600 border-green-200'
+                              }`}
+                              title={`有效期: ${f.startDate} ~ ${f.endDate}`}
+                            >
+                              {pack?.name || f.featureId}
+                              {isWarning && <span className="ml-1">⏳ 即期</span>}
+                              {isExpired && <span className="ml-1">🚫 到期</span>}
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600 font-mono">
+                    {ent.validityStart} <span className="text-gray-300">~</span> {ent.validityEnd}
+                  </td>
+                  <td className="px-4 py-3 text-right space-x-2">
+                    <button 
+                      onClick={() => openVersionModal(ent)}
+                      className="px-2 py-0.5 bg-white border border-blue-600 text-blue-600 rounded text-xs font-bold hover:bg-blue-50 transition-colors"
+                    >
+                      分配版本
+                    </button>
+                    <button 
+                      onClick={() => openFeatureModal(ent)}
+                      className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 transition-colors"
+                    >
+                      开通特性包 [+]
+                    </button>
+                    <button 
+                      onClick={() => setHistoryEnt(ent)}
+                      className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-bold hover:bg-gray-200 transition-colors"
+                    >
+                      修改记录
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 1. Version Assign Modal */}
+      {isVersionModalOpen && selectedEnt && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-[450px] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col border border-gray-100">
+            <div className="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-gray-800 text-xs">分配版本 - {selectedEnt.name}</h3>
+              <button onClick={() => setIsVersionModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3.5 flex-1 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">选择目标版本</label>
+                <select 
+                  value={verBaseId}
+                  onChange={(e) => setVerBaseId(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                >
+                  {versions.map(v => (
+                    <option key={v.id} value={v.code}>{v.name} ({v.description.slice(0, 15)}...)</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">生效开始日期</label>
+                  <input 
+                    type="date"
+                    value={verStart}
+                    onChange={(e) => setVerStart(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-mono"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[11px] font-bold text-gray-700">失效结束日期</label>
+                    <label className="flex items-center cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={isVerPermanent}
+                        onChange={(e) => {
+                          setIsVerPermanent(e.target.checked);
+                          if (e.target.checked) {
+                            setVerEnd('无限期');
+                          } else {
+                            setVerEnd(selectedEnt.validityEnd === '无限期' ? '2026-12-31' : selectedEnt.validityEnd);
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3 w-3 cursor-pointer"
+                      />
+                      <span className="ml-1 text-[10px] text-gray-500 font-bold">无限期</span>
+                    </label>
+                  </div>
+                  <input 
+                    type="date"
+                    disabled={isVerPermanent}
+                    value={isVerPermanent ? '' : verEnd}
+                    onChange={(e) => setVerEnd(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-mono disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+              </div>
+
+              {/* Version Preview */}
+              <div className="border border-gray-100 bg-gray-50 rounded-md p-3 space-y-2">
+                <h4 className="text-[11px] font-bold text-gray-700 flex items-center">
+                  <Info size={12} className="text-blue-500 mr-1" />
+                  所选版本权限配置预览：
+                </h4>
+                <div className="max-h-[120px] overflow-y-auto space-y-2 pr-1 text-[10px]">
+                  {(() => {
+                    const selectedV = versions.find(v => v.code === verBaseId);
+                    if (!selectedV) return <span className="text-gray-400">未知版本</span>;
+                    
+                    return ALL_PERMISSIONS.map(cat => {
+                      const hasAny = cat.items.some(i => selectedV.permissions.includes(i.code));
+                      if (!hasAny) return null;
+
+                      return (
+                        <div key={cat.category} className="space-y-0.5">
+                          <span className="font-bold text-gray-700 text-[10px]">📁 {cat.category}</span>
+                          <div className="grid grid-cols-2 gap-0.5 pl-2 text-[9px]">
+                            {cat.items.map(i => {
+                              const included = selectedV.permissions.includes(i.code);
+                              return (
+                                <div key={i.code} className="flex items-center space-x-1">
+                                  {included ? (
+                                    <Check size={9} className="text-green-500 shrink-0" />
+                                  ) : (
+                                    <span className="text-red-500 font-bold text-[9px] w-2 text-center shrink-0">×</span>
+                                  )}
+                                  <span className={included ? 'text-gray-700' : 'text-gray-300 line-through'}>{i.name}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex justify-end space-x-2">
+              <button 
+                onClick={() => setIsVersionModalOpen(false)}
+                className="px-3 py-1.5 border border-gray-300 rounded text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={handleSaveVersion}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-sm transition-colors"
+              >
+                推送并分配
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Feature packs configure Modal */}
+      {isFeatureModalOpen && selectedEnt && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-[520px] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col border border-gray-100">
+            <div className="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-gray-800 text-xs">配置高级特性包 - {selectedEnt.name}</h3>
+              <button onClick={() => setIsFeatureModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3.5 max-h-[400px]">
+              <div className="bg-blue-50/50 rounded-md p-2 text-xs border border-blue-100 flex items-center justify-between">
+                <div>
+                  <span className="text-gray-500">当前基础版本：</span>
+                  <span className="font-bold text-blue-600">{versions.find(v => v.code === selectedEnt.baseVersionId)?.name || selectedEnt.baseVersionId}</span>
+                </div>
+                <div className="text-gray-400 font-mono text-[9px]">
+                  主版本到期: {selectedEnt.validityEnd}
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-bold text-gray-700">可用特性包配置：</h4>
+                
+                {featurePacks.map(pack => {
+                  const config = configFeatures[pack.code] || { enabled: false, start: selectedEnt.validityStart, end: selectedEnt.validityEnd };
+                  
+                  return (
+                    <div 
+                      key={pack.code}
+                      className={`p-3 border rounded-md transition-all flex flex-col space-y-2 ${config.enabled ? 'border-blue-200 bg-blue-50/10' : 'border-gray-200 hover:border-gray-300'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center cursor-pointer select-none">
+                          <input 
+                            type="checkbox"
+                            checked={config.enabled}
+                            onChange={(e) => {
+                              setConfigFeatures(prev => ({
+                                ...prev,
+                                [pack.code]: { ...prev[pack.code], enabled: e.target.checked }
+                              }));
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                          />
+                          <div className="ml-2">
+                            <span className="text-xs font-bold text-gray-800 mr-2">{pack.name}</span>
+                            <span className="text-[8px] bg-gray-100 border text-gray-500 px-1 py-0.5 rounded font-mono font-bold uppercase">{pack.category}</span>
+                          </div>
+                        </label>
+                        {config.enabled && <Lock size={11} className="text-blue-500" title="生效中" />}
+                      </div>
+
+                      <p className="text-[10px] text-gray-400 pl-5 h-4 truncate leading-tight" title={pack.description}>
+                        {pack.description}
+                      </p>
+
+                      {config.enabled && (
+                        <div className="grid grid-cols-2 gap-2 pl-5 border-t border-gray-100 pt-2 transition-all text-[10px]">
+                          <div>
+                            <label className="block text-[9px] text-gray-400 font-bold mb-0.5">特性生效时间</label>
+                            <input 
+                              type="date"
+                              value={config.start}
+                              onChange={(e) => {
+                                setConfigFeatures(prev => ({
+                                  ...prev,
+                                  [pack.code]: { ...prev[pack.code], start: e.target.value }
+                                }));
+                              }}
+                              className="w-full border border-gray-200 rounded px-2 py-0.5 text-[10px] font-mono bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex justify-between items-center mb-0.5">
+                              <label className="block text-[9px] text-gray-400 font-bold">特性到期时间</label>
+                              <label className="flex items-center cursor-pointer select-none">
+                                <input 
+                                  type="checkbox"
+                                  checked={config.end === '无限期'}
+                                  onChange={(e) => {
+                                    setConfigFeatures(prev => ({
+                                      ...prev,
+                                      [pack.code]: { 
+                                        ...prev[pack.code], 
+                                        end: e.target.checked ? '无限期' : (selectedEnt.validityEnd === '无限期' ? '2026-12-31' : selectedEnt.validityEnd)
+                                      }
+                                    }));
+                                  }}
+                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-2.5 w-2.5 cursor-pointer"
+                                />
+                                <span className="ml-0.5 text-[8px] text-gray-500 font-bold">无限期</span>
+                              </label>
+                            </div>
+                            <input 
+                              type="date"
+                              disabled={config.end === '无限期'}
+                              value={config.end === '无限期' ? '' : config.end}
+                              onChange={(e) => {
+                                setConfigFeatures(prev => ({
+                                  ...prev,
+                                  [pack.code]: { ...prev[pack.code], end: e.target.value }
+                                }));
+                              }}
+                              className="w-full border border-gray-200 rounded px-2 py-0.5 text-[10px] font-mono bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex justify-end space-x-2">
+              <button 
+                onClick={() => setIsFeatureModalOpen(false)}
+                className="px-3 py-1.5 border border-gray-300 rounded text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={handleSaveFeatures}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-sm transition-colors"
+              >
+                配置并推送
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Enterprise Modification History Modal */}
+      {historyEnt && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-[600px] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col border border-gray-100 max-h-[85vh]">
+            <div className="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-gray-800 text-xs flex items-center">
+                <span className="w-1.5 h-3.5 bg-blue-600 rounded mr-2"></span>
+                🏢 版本与特性修改记录 - {historyEnt.name}
+              </h3>
+              <button onClick={() => setHistoryEnt(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto space-y-4">
+              <div className="flex justify-between items-center text-[11px] text-gray-500 bg-gray-50 p-2.5 rounded border border-gray-100">
+                <div>当前基础版本：<span className="font-bold text-blue-600">🛡️ {versions.find(v => v.code === historyEnt.baseVersionId)?.name || historyEnt.baseVersionId}</span></div>
+                <div>版本有效期：<span className="font-mono text-gray-700 font-bold">{historyEnt.validityStart} ~ {historyEnt.validityEnd}</span></div>
+              </div>
+
+              {(() => {
+                const entHistoryRecords = pushRecords.filter(rec => {
+                  try {
+                    const data = JSON.parse(rec.payload);
+                    return data.enterprise === historyEnt.name;
+                  } catch {
+                    return rec.content.includes(historyEnt.name);
+                  }
+                });
+
+                if (entHistoryRecords.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-gray-400">
+                      <History size={24} className="mx-auto mb-2 text-gray-300 animate-pulse" />
+                      <p className="text-xs">暂无该企业的版本或特性修改推送记录</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="border border-gray-150 rounded-lg overflow-hidden">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200 font-bold text-gray-600">
+                          <th className="px-3 py-2 font-bold text-gray-500">变更时间</th>
+                          <th className="px-3 py-2 font-bold text-gray-500">操作描述</th>
+                          <th className="px-3 py-2 font-bold text-gray-500">状态</th>
+                          <th className="px-3 py-2 font-bold text-gray-500 text-right">API数据</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-150">
+                        {entHistoryRecords.map(rec => {
+                          const isSuccess = rec.status === 'success';
+                          return (
+                            <tr key={rec.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-3 py-2.5 font-mono text-gray-400 text-[10px] whitespace-nowrap">{rec.time}</td>
+                              <td className="px-3 py-2.5 font-bold text-gray-800">{rec.content}</td>
+                              <td className="px-3 py-2.5">
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold border ${isSuccess ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                  {isSuccess ? '推送成功' : '推送失败'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 text-right">
+                                <button 
+                                  onClick={() => setSelectedPayload(rec.payload)}
+                                  className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold underline"
+                                >
+                                  查看报文
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setHistoryEnt(null)}
+                className="px-4 py-1.5 bg-gray-800 hover:bg-gray-900 text-white rounded-md text-xs font-semibold shadow-sm"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. API Request Payload Viewer Modal */}
+      {selectedPayload && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]">
+          <div className="w-[450px] bg-white rounded-lg shadow-2xl overflow-hidden border border-gray-100 flex flex-col">
+            <div className="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-gray-85 text-xs flex items-center">
+                <span>📡 API 原始请求数据包 (Payload)</span>
+              </h3>
+              <button onClick={() => setSelectedPayload(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-2 text-xs">
+              <pre className="p-3 bg-gray-900 text-emerald-400 font-mono text-[11px] rounded-lg overflow-x-auto max-h-[260px] border border-gray-800 shadow-inner">
+                <code>{selectedPayload}</code>
+              </pre>
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setSelectedPayload(null)}
+                className="px-4 py-1.5 bg-gray-800 hover:bg-gray-900 text-white rounded-md text-xs font-semibold"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ==========================================
+// 4. 权限目录 (PermissionDirectoryPanel)
+// ==========================================
+interface PermissionDirectoryPanelProps {
+  isSyncing: boolean;
+  setIsSyncing: React.Dispatch<React.SetStateAction<boolean>>;
+  lastSyncTime: string;
+  setLastSyncTime: React.Dispatch<React.SetStateAction<string>>;
+}
+
+function PermissionDirectoryPanel({ isSyncing, setIsSyncing, lastSyncTime, setLastSyncTime }: PermissionDirectoryPanelProps) {
+  const [search, setSearch] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    '仪表盘': true,
+    '设备管理': true
+  });
+
+  const totalCount = ALL_PERMISSIONS.reduce((sum, cat) => sum + cat.items.length, 0);
+
+  const filteredPermissions = useMemo(() => {
+    if (!search) return ALL_PERMISSIONS;
+    return ALL_PERMISSIONS.map(cat => ({
+      ...cat,
+      items: cat.items.filter(i => 
+        i.name.includes(search) || i.code.includes(search)
+      )
+    })).filter(cat => cat.items.length > 0);
+  }, [search]);
+
+  const handleSync = () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsSyncing(false);
+      setLastSyncTime(new Date().toISOString().replace('T', ' ').slice(0, 16));
+      alert('从零碳运营管理平台拉取全量最新目录成功！');
+    }, 1200);
+  };
+
+  const toggleCategory = (cat: string) => {
+    setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
+  };
+
+  return (
+    <div className="space-y-4 text-xs">
+      <div className="flex justify-between items-start bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div>
+          <h2 className="text-base font-bold text-gray-950">权限目录</h2>
+          <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+            <span className="font-bold text-gray-700">📡 同步源：</span>
+            <span>零碳运营管理平台</span>
+            <span className="text-gray-300">|</span>
+            <span className="font-semibold">最后同步时间：</span>
+            <span className="font-mono text-gray-600 bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">{lastSyncTime}</span>
+          </div>
+        </div>
+        <button 
+          onClick={handleSync}
+          className={`px-3 py-1.5 bg-white border rounded-md text-xs font-bold shadow-sm flex items-center transition-colors cursor-pointer ${
+            isSyncing 
+              ? 'text-gray-400 border-gray-200 cursor-not-allowed' 
+              : 'text-blue-600 border-blue-600 hover:bg-blue-50'
+          }`}
+        >
+          <RefreshCw size={13} className={`mr-1.5 ${isSyncing ? 'animate-spin' : ''}`} />
+          {isSyncing ? '同步中...' : '同步权限'}
+        </button>
+      </div>
+
+      {/* Directory Content */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-3.5">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-bold text-gray-700 flex items-center">
+            <Database size={13} className="text-blue-600 mr-1" />
+            全量权限清单：共 {totalCount} 项可用功能元素
+          </div>
+          <div className="relative">
+            <input 
+              type="text"
+              placeholder="搜索权限名称/编码"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-7 pr-3 py-1 border border-gray-300 rounded text-xs w-44 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            />
+            <Search size={12} className="absolute left-2.5 top-2 text-gray-400" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {filteredPermissions.map(cat => {
+            const isExpanded = !!expandedCategories[cat.category];
+
+            return (
+              <div key={cat.category} className="border border-gray-100 rounded-md overflow-hidden shadow-sm">
+                <button
+                  onClick={() => toggleCategory(cat.category)}
+                  className="w-full flex justify-between items-center bg-gray-50/70 p-2.5 text-xs font-bold text-gray-800 border-b border-gray-100 hover:bg-gray-100/50 transition-colors"
+                >
+                  <span className="flex items-center text-xs">
+                    <span className="mr-1.5 text-sm">📁</span>
+                    {cat.category}
+                    <span className="ml-1.5 font-normal text-gray-400">({cat.items.length}项权限)</span>
+                  </span>
+                  <ChevronDown size={13} className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isExpanded && (
+                  <div className="p-2.5 bg-white grid grid-cols-1 md:grid-cols-3 gap-2">
+                    {cat.items.map(item => (
+                      <div 
+                        key={item.code}
+                        className="p-2 border border-gray-100 rounded bg-gray-50/30 hover:bg-gray-50 transition-all hover:shadow-sm text-[11px]"
+                      >
+                        <div className="font-bold text-gray-800">{item.name}</div>
+                        <div className="text-[9px] font-mono text-gray-400 mt-0.5 flex justify-between">
+                          <span>标识: {item.code}</span>
+                          <span className="text-blue-500 font-bold uppercase">Button</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ==========================================
+// 5. 推送记录 (PushHistoryPanel)
+// ==========================================
+interface PushHistoryPanelProps {
+  pushRecords: PushRecord[];
+  setPushRecords: React.Dispatch<React.SetStateAction<PushRecord[]>>;
+}
+
+function PushHistoryPanel({ pushRecords, setPushRecords }: PushHistoryPanelProps) {
+  const [selectedRecord, setSelectedRecord] = useState<PushRecord | null>(null);
+  const [isRetrying, setIsRetrying] = useState<string | null>(null);
+
+  const handleRetry = (id: string) => {
+    setIsRetrying(id);
+    setTimeout(() => {
+      setPushRecords(prev => prev.map(rec => rec.id === id ? {
+        ...rec,
+        status: 'success'
+      } : rec));
+      setIsRetrying(null);
+      alert('推送重试成功！权限同步状态已在零碳端更新。');
+    }, 1000);
+  };
+
+  const handleManualPushAll = () => {
+    alert('正在发起全量微网租户版本和特性状态同步...');
+    setTimeout(() => {
+      alert('全量推送成功！');
+    }, 800);
+  };
+
+  return (
+    <div className="space-y-4 text-xs">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-base font-bold text-gray-950">推送记录</h2>
+          <p className="text-[11px] text-gray-500">记录微网管理后台每次向零碳同步版本分配、特性授权的详细历史</p>
+        </div>
+        <button 
+          onClick={handleManualPushAll}
+          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold flex items-center shadow-sm cursor-pointer"
+        >
+          <Send size={13} className="mr-1" />
+          全量手动推送
+        </button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">时间</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">推送内容</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">目标系统</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase">状态</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {pushRecords.map(rec => {
+              const isSuccess = rec.status === 'success';
+
+              return (
+                <tr key={rec.id} className="hover:bg-gray-50/70 transition-colors text-xs">
+                  <td className="px-4 py-3 text-xs font-mono text-gray-500">{rec.time}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs font-bold text-gray-850">{rec.content}</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs font-medium text-gray-500">{rec.target}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${isSuccess ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                      {isSuccess ? (
+                        <>
+                          <Check size={9} className="mr-1" />
+                          成功
+                        </>
+                      ) : (
+                        <>
+                          <span className="mr-1">×</span>
+                          失败
+                        </>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right space-x-2">
+                    {!isSuccess && (
+                      <button 
+                        onClick={() => handleRetry(rec.id)}
+                        disabled={isRetrying === rec.id}
+                        className="text-xs font-bold text-orange-600 hover:text-orange-850 disabled:text-gray-300"
+                      >
+                        {isRetrying === rec.id ? '正在重试...' : '重试'}
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => setSelectedRecord(rec)}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-850"
+                    >
+                      查看
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* JSON Viewer Modal */}
+      {selectedRecord && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-[450px] bg-white rounded-lg shadow-2xl overflow-hidden border border-gray-100 flex flex-col">
+            <div className="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-gray-850 text-xs">📡 推送详情 (零碳API数据包)</h3>
+              <button onClick={() => setSelectedRecord(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 space-y-2 text-xs">
+              <div className="flex justify-between text-xs text-gray-400 border-b border-gray-100 pb-2">
+                <span>推送编号: <span className="font-mono text-gray-600 font-bold">{selectedRecord.id}</span></span>
+                <span>时间: {selectedRecord.time}</span>
+              </div>
+              <div className="text-xs font-bold text-gray-700">推送 Payload：</div>
+              <pre className="p-3 bg-gray-900 text-emerald-400 font-mono text-[11px] rounded-lg overflow-x-auto max-h-[220px] border border-gray-800 shadow-inner">
+                <code>{selectedRecord.payload}</code>
+              </pre>
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setSelectedRecord(null)}
+                className="px-4 py-1.5 bg-gray-800 hover:bg-gray-900 text-white rounded-md text-xs font-semibold"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ==========================================
+// 6-7. SaaS 用户端与生命周期管理 (SaaSClientSimulation)
+// ==========================================
+interface SaaSClientSimulationProps {
+  saasMenu: string;
+  setSaasMenu: (m: string) => void;
+  saasAlert: { type: 'info' | 'warning' | 'error'; message: string; show: boolean } | null;
+  setSaasAlert: (a: any) => void;
+  simulatedAISchedulerActive: boolean;
+  setSimulatedAISchedulerActive: (a: boolean) => void;
+  versions: Version[];
+  featurePacks: FeaturePack[];
+}
+
+function SaaSClientSimulation({ 
+  saasMenu, 
+  setSaasMenu, 
+  saasAlert, 
+  setSaasAlert, 
+  simulatedAISchedulerActive, 
+  setSimulatedAISchedulerActive,
+  versions,
+  featurePacks
+}: SaaSClientSimulationProps) {
+  
+  const [showPermPreview, setShowPermPreview] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+
+  // Hardcode client's simulated settings
+  const simulatedVersionId = 'standard'; // Trina energy simulated standard version
+  const matchedVersion = versions.find(v => v.code === simulatedVersionId) || versions[0];
+
+  const handleOpenPermPreview = () => setShowPermPreview(true);
+
+  return (
+    <div className="space-y-4 text-xs">
+      {/* Simulation Helper Panel */}
+      <div className="bg-gradient-to-r from-purple-950 to-slate-900 rounded-lg p-3.5 text-white shadow-md border border-purple-900">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-2.5 md:space-y-0">
+          <div className="space-y-0.5">
+            <div className="flex items-center space-x-2">
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <h3 className="font-bold text-xs text-purple-200">SaaS 端仿真生命周期控制器</h3>
+            </div>
+            <p className="text-[10px] text-purple-300">
+              您当前身处<b>天合能源</b>企业SaaS端。切换以下按钮可以触发微网特性的各种<b>开通、即期、到期生命周期提醒</b>
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button 
+              onClick={() => {
+                setSimulatedAISchedulerActive(true);
+                setSaasAlert({
+                  type: 'info',
+                  message: '🎉 新特性已开启：AI智能排程已为天合能源开通，即日起生效！有效期至 2026-12-31。',
+                  show: true
+                });
+              }}
+              className="px-2 py-1 bg-white/10 hover:bg-white/20 text-[10px] font-semibold rounded border border-white/20 text-white transition-all cursor-pointer"
+            >
+              🎉 开通新特性
+            </button>
+            <button 
+              onClick={() => {
+                setSimulatedAISchedulerActive(true);
+                setSaasAlert({
+                  type: 'warning',
+                  message: '⚠️ 需量控制即将到期 [还有3天]，到期后该模块将不可用 [联系续费]！',
+                  show: true
+                });
+              }}
+              className="px-2 py-1 bg-white/10 hover:bg-white/20 text-[10px] font-semibold rounded border border-white/20 text-white transition-all cursor-pointer"
+            >
+              ⚠️ 3天后到期
+            </button>
+            <button 
+              onClick={() => {
+                setSimulatedAISchedulerActive(false); // hides menu!
+                setSaasAlert({
+                  type: 'error',
+                  message: '🔴 需量控制已到期，相关策略逻辑已关闭，请联系客户经理重新开通 [我知道了]。',
+                  show: true
+                });
+              }}
+              className="px-2 py-1 bg-white/10 hover:bg-white/20 text-[10px] font-semibold rounded border border-white/20 text-white transition-all cursor-pointer"
+            >
+              🔴 特性已到期
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Warning Banner / Toast (Position 7) */}
+      {saasAlert && saasAlert.show && (
+        <div className={`p-3 rounded-lg shadow-sm border flex items-center justify-between transition-all ${
+          saasAlert.type === 'info' 
+            ? 'bg-blue-50 border-blue-200 text-blue-800' 
+            : saasAlert.type === 'warning'
+              ? 'bg-amber-50 border-amber-200 text-amber-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          <div className="flex items-center space-x-2 text-xs">
+            {saasAlert.type === 'info' && <Sparkles size={14} className="text-blue-500 animate-pulse" />}
+            {saasAlert.type === 'warning' && <AlertTriangle size={14} className="text-amber-500 animate-pulse" />}
+            {saasAlert.type === 'error' && <X size={14} className="text-red-500" />}
+            <span className="font-bold">{saasAlert.message}</span>
+          </div>
+          <div className="flex items-center space-x-1.5 shrink-0">
+            {saasAlert.type === 'warning' && (
+              <button 
+                onClick={() => setShowContactModal(true)} 
+                className="bg-amber-600 hover:bg-amber-700 text-white px-2 py-0.5 rounded text-[10px] font-bold"
+              >
+                联系续费
+              </button>
+            )}
+            <button 
+              onClick={() => setSaasAlert({ ...saasAlert, show: false })}
+              className="text-gray-400 hover:text-gray-600 p-0.5"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Real SaaS portal layout container */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 min-h-[400px]">
+        
+        {/* Render SaaS pages */}
+        {saasMenu === 'saas-version' ? (
+          <div className="space-y-5">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2.5">
+              <h2 className="text-sm font-bold text-gray-900 flex items-center">
+                <ShieldCheck size={16} className="text-blue-600 mr-1.5" />
+                我的版本与特性功能
+              </h2>
+              <span className="text-xs text-gray-400">企业: 天合能源</span>
+            </div>
+
+            {/* Current version block (Page 6 - 当前版本) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg p-4 text-white space-y-3 shadow-sm relative overflow-hidden">
+                <div className="absolute right-0 bottom-0 translate-x-1/4 translate-y-1/4 rotate-12 opacity-10">
+                  <ShieldCheck size={120} />
+                </div>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-blue-100 tracking-wider">天合能源 · 基础系统</span>
+                    <h3 className="text-lg font-black mt-0.5">{matchedVersion.name}</h3>
+                  </div>
+                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-[9px] font-black uppercase">
+                    PROV_01
+                  </span>
+                </div>
+                <div className="text-xs text-blue-100/90 leading-relaxed">
+                  该系统授权由“零碳运营管理平台”统一分发并推送，到期将自动回归基础版本。
+                </div>
+                <div className="flex justify-between items-center pt-2.5 border-t border-white/20">
+                  <span className="text-[10px] text-blue-100 font-semibold font-mono">
+                    有效期至 2026-12-31
+                  </span>
+                  <button 
+                    onClick={handleOpenPermPreview}
+                    className="px-2.5 py-1 bg-white text-blue-600 hover:bg-blue-50 rounded text-xs font-black transition-all shadow-sm cursor-pointer"
+                  >
+                    查看权限详情
+                  </button>
+                </div>
+              </div>
+
+              {/* Contact card */}
+              <div className="border border-gray-200 rounded-lg p-4 flex flex-col justify-between bg-gray-50/50 space-y-3">
+                <div className="space-y-1">
+                  <h4 className="font-bold text-gray-800 text-xs">需要更高级的微网运行策略？</h4>
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                    当前版本不满足运行负荷？您可以申请开通“专业版”，全方位解锁高精度AI负荷预测与AI智能储能排程控制，平均提升储能套利收益 15%~25%
+                  </p>
+                </div>
+                <div className="pt-2 flex items-center justify-between">
+                  <button 
+                    onClick={() => setShowContactModal(true)}
+                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-xs shadow-sm transition-colors cursor-pointer"
+                  >
+                    升级专业版本
+                  </button>
+                  <span className="text-[10px] text-gray-400">专属客户经理: 郑经理 (13991159819)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Activated Features Block (Page 6 - 已开通特性) */}
+            <div className="space-y-2.5">
+              <h3 className="font-bold text-gray-800 text-xs flex items-center">
+                <Package size={14} className="text-emerald-500 mr-1.5" />
+                已开通增值特性功能 (共 3 项)
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Feature 1 */}
+                <div className="p-3 border border-gray-200 rounded-lg space-y-2 bg-white hover:border-gray-300 transition-colors shadow-sm relative">
+                  <div className="flex justify-between items-center">
+                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[8px] font-bold border border-blue-100 font-mono uppercase">
+                      STRATEGY (策略)
+                    </span>
+                    <span className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded text-[8px] font-bold border border-green-100 flex items-center">
+                      <span className="w-1 h-1 bg-green-500 rounded-full mr-1" />
+                      生效中
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-xs">📊 AI排程</h4>
+                    <p className="text-[11px] text-gray-400 mt-0.5 h-6 line-clamp-2 leading-tight">
+                      智能排程算法，根据未来24小时光伏出力与负荷预测，动态优化储能放电策略。
+                    </p>
+                  </div>
+                  <div className="flex justify-between items-center text-[9px] text-gray-400 border-t border-gray-50 pt-2 font-mono">
+                    <span>剩余 174 天</span>
+                    <span>到期: 2026-12-31</span>
+                  </div>
+                </div>
+
+                {/* Feature 2 */}
+                <div className="p-3 border border-gray-200 rounded-lg space-y-2 bg-white hover:border-gray-300 transition-colors shadow-sm relative">
+                  <div className="flex justify-between items-center">
+                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[8px] font-bold border border-blue-100 font-mono uppercase">
+                      STRATEGY (策略)
+                    </span>
+                    <span className="px-1.5 py-0.5 bg-green-50 text-green-600 rounded text-[8px] font-bold border border-green-100 flex items-center">
+                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse" />
+                      生效中
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-xs">📊 峰谷套利</h4>
+                    <p className="text-[11px] text-gray-400 mt-0.5 h-6 line-clamp-2 leading-tight">
+                      基于最新省级分时电价，自动执行两充两放充电策略，赚取高额差价收益。
+                    </p>
+                  </div>
+                  <div className="flex justify-between items-center text-[9px] text-gray-400 border-t border-gray-50 pt-2 font-mono">
+                    <span>剩余 89 天</span>
+                    <span>到期: 2026-10-10</span>
+                  </div>
+                </div>
+
+                {/* Feature 3 - This might warning or show expired based on simulated state */}
+                <div className={`p-3 border rounded-lg space-y-2 bg-white transition-all shadow-sm relative ${
+                  simulatedAISchedulerActive 
+                    ? 'border-amber-200 bg-amber-50/5' 
+                    : 'border-red-100 bg-red-50/5 opacity-60'
+                }`}>
+                  <div className="flex justify-between items-center">
+                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[8px] font-bold border border-blue-100 font-mono uppercase">
+                      STRATEGY (策略)
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold border flex items-center ${
+                      simulatedAISchedulerActive 
+                        ? 'bg-amber-50 text-amber-600 border-amber-200 animate-pulse' 
+                        : 'bg-red-50 text-red-600 border-red-200 font-bold'
+                    }`}>
+                      <span className={`w-1 h-1 rounded-full mr-1 ${simulatedAISchedulerActive ? 'bg-amber-500' : 'bg-red-500'}`} />
+                      {simulatedAISchedulerActive ? '即将到期' : '已到期关闭'}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900 text-xs">🔴 需量控制</h4>
+                    <p className="text-[11px] text-gray-400 mt-0.5 h-6 line-clamp-2 leading-tight">
+                      高精度需量控制逻辑，超出额定变压器负荷时自动切断二级低负荷。
+                    </p>
+                  </div>
+                  <div className="flex justify-between items-center text-[9px] text-gray-400 border-t border-gray-50 pt-2 font-mono">
+                    <span>{simulatedAISchedulerActive ? '剩余 3 天' : '已失效'}</span>
+                    <span>到期: 2026-07-16</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Browsable Market Block (Page 6 - 特性市场) */}
+            <div className="space-y-2.5">
+              <h3 className="font-bold text-gray-800 text-xs flex items-center">
+                <Sparkles size={14} className="text-purple-600 mr-1.5" />
+                微网高级增值特性市场 (可浏览开通)
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+                {featurePacks.map(pack => {
+                  const alreadyOpen = ['ai-scheduler', 'peak-valley', 'demand-control'].includes(pack.code);
+                  
+                  return (
+                    <div 
+                      key={pack.code}
+                      className="border border-gray-100 rounded-lg p-3 bg-white hover:border-gray-200 transition-colors flex flex-col justify-between space-y-2 shadow-sm"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-gray-800 text-[10px]">{pack.name}</span>
+                          <span className="px-1 py-0.5 bg-purple-50 text-purple-600 rounded text-[7px] font-bold border border-purple-100 uppercase font-mono">
+                            {pack.category.slice(0, 4)}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 line-clamp-2 h-6 leading-tight" title={pack.description}>
+                          {pack.description}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-50 flex items-center justify-between">
+                        <span className="text-[9px] text-gray-400">增值包</span>
+                        <button 
+                          onClick={() => {
+                            if (alreadyOpen) {
+                              alert('该特性您已经开通啦！可在上方面板中查看有效期。');
+                            } else {
+                              setShowContactModal(true);
+                            }
+                          }}
+                          className={`px-2 py-0.5 text-[9px] font-bold rounded transition-colors ${
+                            alreadyOpen 
+                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100' 
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                        >
+                          {alreadyOpen ? '已开通' : '申请开通'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : saasMenu === 'saas-dashboard' ? (
+          /* Simulated Dashboard screen to show realistic look & feel */
+          <div className="space-y-5">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+              <h3 className="font-bold text-gray-800 text-xs">💡 实时看板 - 天合微网变电所 1# 站</h3>
+              <span className="text-[10px] text-gray-400">更新时间：2026-07-12 20:13</span>
+            </div>
+
+            <div className="grid grid-cols-4 gap-4 text-center">
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                <div className="text-[10px] text-gray-400">当前负载率</div>
+                <div className="text-base font-bold text-gray-800 mt-0.5 font-mono">54.2 %</div>
+                <span className="text-[8px] text-green-500">● 变压器正常</span>
+              </div>
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                <div className="text-[10px] text-gray-400">储能 SOC</div>
+                <div className="text-base font-bold text-gray-800 mt-0.5 font-mono">78.5 %</div>
+                <span className="text-[8px] text-blue-500">● 充电阶段</span>
+              </div>
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                <div className="text-[10px] text-gray-400">光伏当前功率</div>
+                <div className="text-base font-bold text-gray-800 mt-0.5 font-mono">142.5 kW</div>
+                <span className="text-[8px] text-orange-500">☼ 日照充足</span>
+              </div>
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                <div className="text-[10px] text-gray-400">本日预计套利收益</div>
+                <div className="text-base font-bold text-emerald-600 mt-0.5 font-mono">¥ 1,842.50</div>
+                <span className="text-[8px] text-emerald-600">↑ 提升 14.5%</span>
+              </div>
+            </div>
+
+            {/* Simulation of Active Strategy */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-2 bg-white">
+              <h4 className="text-[11px] font-bold text-gray-800">当前运行控制策略状态</h4>
+              <div className="text-[10px] text-gray-500 leading-relaxed grid grid-cols-2 gap-3">
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span>峰谷套利策略：运行中 (电网平段以100kW补充)</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span>AI智能预测：正常运行中，光伏拟合度 98.42%</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span>多级变压器层级展示：未启用此高级架构</span>
+                </div>
+                <div className="flex items-center space-x-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${simulatedAISchedulerActive ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span>
+                    安全需量自动切除：
+                    {simulatedAISchedulerActive ? '运行中 (设定阈值：400kVA)' : '已到期关闭 (请联系客服重新开通包)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : saasMenu === 'saas-ai-scheduler' ? (
+          /* Simulated AI Scheduler view when unlocked! */
+          <div className="space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+              <div className="flex items-center space-x-1.5">
+                <Sparkles className="text-purple-600 animate-pulse" size={16} />
+                <h3 className="font-bold text-gray-900 text-xs">🤖 AI智能排程与充放电调控</h3>
+              </div>
+              <span className="text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 animate-pulse">
+                AI排程特性包：生效中 (剩174天)
+              </span>
+            </div>
+
+            <p className="text-[11px] text-gray-500">
+              AI排程引擎根据未来24小时负荷和天气预报，自动生成并向储能系统下发最优的充放电指令策略，最大化降低大工业需量费和提升分时电价差价。
+            </p>
+
+            <div className="border border-purple-100 rounded-lg p-4 bg-gradient-to-br from-purple-50/50 to-indigo-50/10 space-y-3">
+              <div className="flex justify-between items-center font-bold text-gray-800 text-[11px]">
+                <span>智能优化运行曲线：2026-07-13 充放电AI规划</span>
+                <button 
+                  onClick={() => alert('已重新触发AI预测并向边缘网关同步最新调度排程指令包！')}
+                  className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold shadow-sm"
+                >
+                  🚀 立即重新进行AI优化排程
+                </button>
+              </div>
+
+              {/* Grid representation */}
+              <div className="grid grid-cols-5 gap-2 text-center text-[10px]">
+                <div className="border border-purple-200 rounded p-2 bg-white">
+                  <div className="text-gray-400 text-[9px]">00:00 - 07:00 (深谷)</div>
+                  <div className="font-bold text-blue-600 mt-0.5 text-[10px]">满功率充电</div>
+                </div>
+                <div className="border border-purple-200 rounded p-2 bg-white">
+                  <div className="text-gray-400 text-[9px]">08:00 - 11:00 (高峰)</div>
+                  <div className="font-bold text-red-600 mt-0.5 text-[10px]">满功率放电</div>
+                </div>
+                <div className="border border-purple-200 rounded p-2 bg-white">
+                  <div className="text-gray-400 text-[9px]">11:00 - 15:00 (平段)</div>
+                  <div className="font-bold text-blue-600 mt-0.5 text-[10px]">低功率充电</div>
+                </div>
+                <div className="border border-purple-200 rounded p-2 bg-white">
+                  <div className="text-gray-400 text-[9px]">15:00 - 19:00 (高峰)</div>
+                  <div className="font-bold text-red-600 mt-0.5 text-[10px]">满功率放电</div>
+                </div>
+                <div className="border border-purple-200 rounded p-2 bg-white">
+                  <div className="text-gray-400 text-[9px]">19:00 - 21:00 (尖峰)</div>
+                  <div className="font-bold text-red-700 mt-0.5 text-[10px] font-black">削峰放电</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center space-y-2">
+            <Sliders size={28} className="text-gray-300" />
+            <h4 className="font-bold text-gray-700 text-xs">该模拟子页面暂不需要原型界面</h4>
+            <p className="text-[10px] text-gray-400 max-w-xs">您可以在左侧菜单中进入“版本与特性”或“实时看板”查看已请求的核心原型页面。</p>
+          </div>
+        )}
+      </div>
+
+      {/* Popups inside SaaS Portal */}
+      
+      {/* 1. View Version Perms list */}
+      {showPermPreview && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-[380px] bg-white rounded-lg shadow-2xl overflow-hidden border border-gray-100 flex flex-col">
+            <div className="p-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+              <h3 className="font-bold text-gray-800 text-xs">🛡️ 我的系统版本包含权限</h3>
+              <button onClick={() => setShowPermPreview(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 max-h-[250px] overflow-y-auto space-y-2 text-xs">
+              {ALL_PERMISSIONS.map(cat => {
+                const items = cat.items.filter(i => matchedVersion.permissions.includes(i.code));
+                if (items.length === 0) return null;
+
+                return (
+                  <div key={cat.category} className="space-y-1 bg-gray-50 p-2 rounded border border-gray-100">
+                    <span className="font-bold text-gray-700">📁 {cat.category}</span>
+                    <div className="grid grid-cols-2 gap-1 pl-2 mt-0.5 text-[10px]">
+                      {items.map(i => (
+                        <div key={i.code} className="flex items-center text-gray-600 font-medium">
+                          <span className="text-green-500 font-bold mr-1">✓</span>
+                          {i.name}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setShowPermPreview(false)}
+                className="px-4 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold"
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Contact Support renew or upgrade modal */}
+      {showContactModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="w-[360px] bg-white rounded-lg shadow-2xl overflow-hidden border border-gray-100 flex flex-col">
+            <div className="p-4 text-center space-y-3">
+              <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+                <Building2 size={20} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-bold text-gray-900 text-xs">提交升级/续费开通申请</h3>
+                <p className="text-[11px] text-gray-500 max-w-xs mx-auto">
+                  我们已收到您的申请意向。根据“零碳”分级运营规则，我们将安排您的微网专属大客户服务经理为您办理开通合同：
+                </p>
+              </div>
+
+              <div className="bg-gray-50 rounded-md p-2 text-left border border-gray-100 text-[10px] space-y-1 font-medium text-gray-600 max-w-sm mx-auto">
+                <div className="flex justify-between">
+                  <span>🏢 企业名称:</span>
+                  <span className="font-bold text-gray-800">天合能源有限公司</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>📡 当前系统:</span>
+                  <span className="font-bold text-gray-800">标准版</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>📞 经理热线:</span>
+                  <span className="font-bold text-blue-600 hover:underline">13991159819 (郑经理)</span>
+                </div>
+              </div>
+
+              <div className="pt-1.5 text-[9px] text-gray-400">
+                后台管理员也直接可通过管理后台左侧导航的“企业版本分配”一键开通和延期哦！
+              </div>
+            </div>
+
+            <div className="p-3 bg-gray-50 border-t border-gray-150 flex justify-end space-x-1.5">
+              <button 
+                onClick={() => setShowContactModal(false)}
+                className="px-2.5 py-1 border border-gray-300 rounded text-[10px] text-gray-600 hover:bg-gray-100 font-semibold"
+              >
+                取消
+              </button>
+              <button 
+                onClick={() => {
+                  setShowContactModal(false);
+                  alert('升级意向已记录，并向客服总监和郑经理下发跟进通知工单！');
+                }}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-[10px] font-semibold hover:bg-blue-700"
+              >
+                确认提交
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
