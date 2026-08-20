@@ -4,6 +4,7 @@ import {
   ChevronRight, Check, AlertTriangle, Info, Trash2, Edit, Sparkles, Layout, RefreshCw,
   Upload, Download, Calendar
 } from 'lucide-react';
+import { StationWorkspace } from './StationWorkspace';
 
 // Compact rich mock data
 const INITIAL_ENTERPRISES = [
@@ -216,12 +217,49 @@ const INITIAL_LOCAL_APPLICATIONS = [
   { id: '2070075386058518528', name: '网关', type: '网关', sn: '4d6d90865057ad5d', applyTime: '2026-06-25 17:23:27', status: 'rejected', deviceCount: 8, station: '顺和食品有限公司2#', enterprise: '天津市顺和食品有限公司' }
 ];
 
-export function GridWorkspaceContainer({ activeTab, setActiveTab }: { activeTab: string, setActiveTab: (t: string) => void }) {
+export function GridWorkspaceContainer({ 
+  activeTab, 
+  setActiveTab,
+  initialWorkspaceStation,
+  clearInitialWorkspaceStation,
+  versions,
+  featurePacks
+}: { 
+  activeTab: string, 
+  setActiveTab: (t: string) => void,
+  initialWorkspaceStation?: any,
+  clearInitialWorkspaceStation?: () => void,
+  versions?: any[],
+  featurePacks?: any[]
+}) {
   const [openTabs, setOpenTabs] = useState<string[]>(['enterprise', 'site', 'device', 'device-apply', 'topo']);
+  const [workspaceStation, setWorkspaceStation] = useState<any>(null);
   
   const [enterprises, setEnterprises] = useState(INITIAL_ENTERPRISES);
-  const [stations, setStations] = useState(INITIAL_STATIONS);
-  const [devices, setDevices] = useState(INITIAL_DEVICES);
+  const [stations, setStations] = useState(() => {
+    const saved = localStorage.getItem('wizard_created_stations');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return [...INITIAL_STATIONS, ...parsed];
+      } catch (e) {
+        return INITIAL_STATIONS;
+      }
+    }
+    return INITIAL_STATIONS;
+  });
+  const [devices, setDevices] = useState(() => {
+    const saved = localStorage.getItem('wizard_created_devices');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return [...INITIAL_DEVICES, ...parsed];
+      } catch (e) {
+        return INITIAL_DEVICES;
+      }
+    }
+    return INITIAL_DEVICES;
+  });
   const [localDevices, setLocalDevices] = useState(INITIAL_LOCAL_APPLICATIONS);
   
   // Shared Navigation / Filtering States
@@ -230,12 +268,38 @@ export function GridWorkspaceContainer({ activeTab, setActiveTab }: { activeTab:
   const [deviceFilterStation, setDeviceFilterStation] = useState('');
   const [addSitePreEnterprise, setAddSitePreEnterprise] = useState('');
 
-  // Handle Tab sync with sidebar nav
+  // Handle Tab sync with sidebar nav and reload wizard-created items
   useEffect(() => {
     if (activeTab && !openTabs.includes(activeTab)) {
       setOpenTabs(prev => [...prev, activeTab]);
     }
+
+    const savedStations = localStorage.getItem('wizard_created_stations');
+    if (savedStations) {
+      try {
+        const parsed = JSON.parse(savedStations);
+        setStations([...INITIAL_STATIONS, ...parsed]);
+      } catch (e) {}
+    }
+    const savedDevices = localStorage.getItem('wizard_created_devices');
+    if (savedDevices) {
+      try {
+        const parsed = JSON.parse(savedDevices);
+        setDevices([...INITIAL_DEVICES, ...parsed]);
+      } catch (e) {}
+    }
   }, [activeTab]);
+
+  // Sync initial auto-open workspace station
+  useEffect(() => {
+    if (initialWorkspaceStation) {
+      setWorkspaceStation(initialWorkspaceStation);
+      setActiveTab('site');
+      if (clearInitialWorkspaceStation) {
+        clearInitialWorkspaceStation();
+      }
+    }
+  }, [initialWorkspaceStation]);
 
   const handleCloseTab = (tab: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -250,6 +314,21 @@ export function GridWorkspaceContainer({ activeTab, setActiveTab }: { activeTab:
   };
 
   const pendingCount = localDevices.filter(d => d.status === 'pending').length;
+
+  if (workspaceStation) {
+    return (
+      <StationWorkspace 
+        station={workspaceStation}
+        onClose={() => setWorkspaceStation(null)}
+        stations={stations}
+        setStations={setStations}
+        devices={devices}
+        setDevices={setDevices}
+        versions={versions}
+        featurePacks={featurePacks}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-gray-50/50 overflow-hidden">
@@ -325,6 +404,7 @@ export function GridWorkspaceContainer({ activeTab, setActiveTab }: { activeTab:
               setSelectedStationForTopo(stName);
               setActiveTab('topo');
             }}
+            onOpenWorkspace={(s) => setWorkspaceStation(s)}
           />
         )}
         {activeTab === 'device' && (
@@ -481,10 +561,11 @@ function EnterpriseTab({ enterprises, onViewStations, onAddStation }: {
 /* ================== TAB 2: Site Tab ================== */
 function SiteTab({ 
   stations, setStations, enterprises, initialFilterEnterprise, clearInitialFilterEnterprise, 
-  preselectedEnterprise, clearPreselectedEnterprise, onManageDevices, onEditTopology 
+  preselectedEnterprise, clearPreselectedEnterprise, onManageDevices, onEditTopology, onOpenWorkspace 
 }: {
   stations: any[], setStations: any, enterprises: any[], initialFilterEnterprise: string, clearInitialFilterEnterprise: () => void,
-  preselectedEnterprise: string, clearPreselectedEnterprise: () => void, onManageDevices: (name: string) => void, onEditTopology: (name: string) => void
+  preselectedEnterprise: string, clearPreselectedEnterprise: () => void, onManageDevices: (name: string) => void, onEditTopology: (name: string) => void,
+  onOpenWorkspace: (station: any) => void
 }) {
   const [filterId, setFilterId] = useState('');
   const [filterName, setFilterName] = useState('');
@@ -493,6 +574,7 @@ function SiteTab({
   const [editingStation, setEditingStation] = useState<any>(null);
   const [topoModalStation, setTopoModalStation] = useState<any>(null);
   const [newTopoName, setNewTopoName] = useState('');
+  const [drawerImage, setDrawerImage] = useState<string>('');
 
   // Handle cross-tab navigation filter
   useEffect(() => {
@@ -506,6 +588,7 @@ function SiteTab({
   useEffect(() => {
     if (preselectedEnterprise) {
       setEditingStation({ enterpriseName: preselectedEnterprise });
+      setDrawerImage('');
       setIsDrawerOpen(true);
       clearPreselectedEnterprise();
     }
@@ -519,6 +602,7 @@ function SiteTab({
 
   const handleEdit = (station: any) => {
     setEditingStation(station);
+    setDrawerImage(station.stationImage || '');
     setIsDrawerOpen(true);
   };
 
@@ -560,7 +644,7 @@ function SiteTab({
             <button className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold flex items-center justify-center">搜索</button>
           </div>
           <div className="flex justify-end">
-            <button onClick={() => { setEditingStation(null); setIsDrawerOpen(true); }} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold flex items-center">新增站点</button>
+            <button onClick={() => { setEditingStation(null); setDrawerImage(''); setIsDrawerOpen(true); }} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold flex items-center">新增站点</button>
           </div>
         </div>
       </div>
@@ -603,9 +687,8 @@ function SiteTab({
                 <td className="px-4 py-3 text-gray-400 font-mono">{s.createdAt}</td>
                 <td className="px-4 py-3 text-center">
                   <div className="flex justify-center space-x-1">
+                    <button onClick={() => onOpenWorkspace(s)} className="px-1.5 py-0.5 text-emerald-600 border border-emerald-200 hover:bg-emerald-50/50 rounded text-[10px] font-bold transition-colors">站点工作台</button>
                     <button onClick={() => handleEdit(s)} className="px-1.5 py-0.5 text-blue-600 border border-blue-200 hover:bg-blue-50/50 rounded text-[10px] font-medium transition-colors">编辑</button>
-                    <button onClick={() => onManageDevices(s.name)} className="px-1.5 py-0.5 text-blue-600 border border-blue-200 hover:bg-blue-50/50 rounded text-[10px] font-medium transition-colors">管理设备</button>
-                    <button onClick={() => setTopoModalStation(s)} className="px-1.5 py-0.5 text-blue-600 border border-blue-200 hover:bg-blue-50/50 rounded text-[10px] font-medium transition-colors">管理拓扑</button>
                     <button onClick={() => setStations(stations.filter(st => st.id !== s.id))} className="px-1.5 py-0.5 text-red-600 border border-red-200 hover:bg-red-50/50 rounded text-[10px] font-medium transition-colors">删除</button>
                   </div>
                 </td>
@@ -615,13 +698,13 @@ function SiteTab({
         </table>
       </div>
 
-      {/* Drawer consistent with Screenshot 2 */}
+      {/* Drawer consistent with Station Setup Wizard and Screenshot 2 */}
       {isDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsDrawerOpen(false)}></div>
           <div className="relative w-[780px] bg-white h-full shadow-2xl flex flex-col">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-[#fbfcfd]">
-              <h3 className="text-sm font-bold text-gray-800">{editingStation?.id ? '编辑基础信息' : '新增站点'}</h3>
+              <h3 className="text-sm font-bold text-gray-800">{editingStation?.id ? '编辑站点详细档案' : '新增站点'}</h3>
               <button onClick={() => setIsDrawerOpen(false)} className="p-1 hover:bg-gray-100 rounded text-gray-400"><X size={16} /></button>
             </div>
             
@@ -630,81 +713,363 @@ function SiteTab({
               const fd = new FormData(e.currentTarget);
               handleSave({
                 name: fd.get('name'),
+                category: fd.get('category'),
                 enterpriseName: fd.get('enterpriseName'),
                 managerName: fd.get('managerName'),
                 phone: fd.get('phone'),
                 purchasePriceType: fd.get('purchasePriceType') || '固定分时电价',
                 feedInPriceType: fd.get('feedInPriceType') || '固定价格',
-                address: fd.get('address')
+                address: fd.get('address'),
+                pvCapacity: fd.get('pvCapacity'),
+                pvInverterCount: fd.get('pvInverterCount'),
+                pvHasRadiometer: fd.get('pvHasRadiometer'),
+                pvAllowGrid: fd.get('pvAllowGrid'),
+                pvTiltAngle: fd.get('pvTiltAngle'),
+                pvAzimuthAngle: fd.get('pvAzimuthAngle'),
+                essCapacity: fd.get('essCapacity'),
+                essCount: fd.get('essCount'),
+                essCycles: fd.get('essCycles'),
+                essDod: fd.get('essDod'),
+                chargingPileCount: fd.get('chargingPileCount'),
+                stationImage: drawerImage,
+                insuranceRemark: fd.get('insuranceRemark')
               });
             }} className="flex-1 overflow-auto p-6 space-y-6 text-xs text-gray-700">
               
-              {/* Basic Section */}
+              {/* ===== Group 1: 基本信息 ===== */}
               <div className="space-y-4">
-                <h4 className="font-bold text-gray-950 flex items-center border-l-2 border-blue-600 pl-2">基本信息</h4>
+                <div className="flex items-center space-x-2 border-b border-gray-100 pb-2">
+                  <span className="w-1.5 h-3.5 bg-blue-600 rounded-sm"></span>
+                  <h4 className="font-bold text-gray-950">基本信息</h4>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
+                  {/* 所属企业 */}
                   <div className="space-y-1">
                     <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>所属企业</label>
                     <select name="enterpriseName" defaultValue={editingStation?.enterpriseName || ''} required className="w-full px-3 py-1.5 border border-gray-200 rounded bg-white">
-                      <option value="">请选择</option>
+                      <option value="">请选择所属企业</option>
                       {enterprises.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}
                     </select>
                   </div>
+
+                  {/* 站点分类 */}
                   <div className="space-y-1">
-                    <label className="font-semibold text-gray-600">站点分类</label>
-                    <select className="w-full px-3 py-1.5 border border-gray-200 rounded bg-white">
-                      <option value="storage">光储电站</option>
-                      <option value="pv">纯光伏站</option>
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>站点分类</label>
+                    <select name="category" defaultValue={editingStation?.category || '光储充站点'} className="w-full px-3 py-1.5 border border-gray-200 rounded bg-white">
+                      <option value="光储充站点">光储充站点</option>
+                      <option value="光储站点">光储站点</option>
+                      <option value="光伏站点">光伏站点</option>
+                      <option value="储能站点">储能站点</option>
+                      <option value="充电站点">充电站点</option>
                     </select>
                   </div>
+
+                  {/* 站点编号 */}
                   <div className="space-y-1">
-                    <label className="font-semibold text-gray-600">站点名称</label>
-                    <input name="name" type="text" required defaultValue={editingStation?.name || ''} className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500" />
+                    <label className="font-semibold text-gray-600">站点编号</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={editingStation?.id || '（保存后自动生成）'}
+                      placeholder="自动生成站点编号"
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded bg-gray-50 text-gray-400 cursor-not-allowed font-mono"
+                    />
                   </div>
+
+                  {/* 站点名称 */}
                   <div className="space-y-1">
-                    <label className="font-semibold text-gray-600">负责人</label>
-                    <input name="managerName" type="text" required defaultValue={editingStation?.managerName || ''} className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none" />
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>站点名称</label>
+                    <input name="name" type="text" required defaultValue={editingStation?.name || ''} placeholder="请输入站点名称" className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500" />
                   </div>
+
+                  {/* 负责人 */}
                   <div className="space-y-1">
-                    <label className="font-semibold text-gray-600">手机号</label>
-                    <input name="phone" type="text" required defaultValue={editingStation?.phone || ''} className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none" />
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>负责人名称</label>
+                    <input name="managerName" type="text" required defaultValue={editingStation?.managerName || ''} placeholder="请输入负责人名称" className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500" />
                   </div>
+
+                  {/* 手机号 */}
                   <div className="space-y-1">
-                    <label className="font-semibold text-gray-600">购电电价类型</label>
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>手机号</label>
+                    <input name="phone" type="text" required defaultValue={editingStation?.phone || ''} placeholder="请输入手机号" className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                  </div>
+
+                  {/* 电价类型 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>电价类型</label>
                     <select name="purchasePriceType" defaultValue={editingStation?.purchasePriceType || '固定分时电价'} className="w-full px-3 py-1.5 border border-gray-200 rounded bg-white">
+                      <option value="固定电价">固定电价</option>
                       <option value="固定分时电价">固定分时电价</option>
                       <option value="市场化价格">市场化价格</option>
+                      <option value="行业中位数电价">行业中位数电价</option>
+                    </select>
+                  </div>
+
+                  {/* 上网电价类型 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>上网电价类型</label>
+                    <select name="feedInPriceType" defaultValue={editingStation?.feedInPriceType || '固定价格'} className="w-full px-3 py-1.5 border border-gray-200 rounded bg-white">
+                      <option value="固定价格">固定价格</option>
+                      <option value="分时上网电价">分时上网电价</option>
+                      <option value="一站一议价格">一站一议价格</option>
                     </select>
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-gray-600">站点地址</label>
-                  <input name="address" type="text" required defaultValue={editingStation?.address || ''} placeholder="请输入站点地址" className="w-full px-3 py-1.5 border border-gray-200 rounded mb-2 outline-none" />
-                  <div className="h-44 bg-slate-100 rounded flex flex-col items-center justify-center border border-dashed border-gray-300 text-gray-400 font-mono relative">
-                    <MapPin className="text-blue-500 opacity-60 mb-1" size={24} />
-                    <span>AutoNavi Map Simulated Area</span>
-                    <span className="absolute bottom-1.5 left-2 text-[9px] text-gray-400">高德地图 © 2026 AutoNavi - GS(2025)5996号</span>
+
+                {/* 站点地址 with high-fidelity map */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>站点地址</label>
+                    <span className="text-[10px] text-blue-600 hover:text-blue-500 transition cursor-pointer">
+                      请在下方地图中定位站点地址
+                    </span>
+                  </div>
+                  <input name="address" type="text" required defaultValue={editingStation?.address || '江苏省常州市新北区天合路2号'} placeholder="请输入站点地址" className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500" />
+                  
+                  {/* Interactive map in drawer */}
+                  <div className="relative h-44 bg-slate-950 rounded border border-gray-200 overflow-hidden">
+                    <div className="w-full h-full bg-[#111827] relative opacity-90">
+                      {/* Gridlines */}
+                      <svg className="absolute inset-0 w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                          <pattern id="drawerMapGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#475569" strokeWidth="0.5" />
+                          </pattern>
+                        </defs>
+                        <rect width="100%" height="100%" fill="url(#drawerMapGrid)" />
+                      </svg>
+
+                      {/* Rivers & roads */}
+                      <svg className="absolute inset-0 w-full h-full opacity-35" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M -10 90 Q 140 140 240 70 T 500 120" fill="none" stroke="#2563eb" strokeWidth="10" strokeLinecap="round" />
+                        <path d="M 40 -10 L 140 210" fill="none" stroke="#ea580c" strokeWidth="2" />
+                        <path d="M -10 130 L 510 130" fill="none" stroke="#ea580c" strokeWidth="2.5" />
+                      </svg>
+
+                      {/* Landmarks */}
+                      {[
+                        { label: '常州 (天合光能)', lat: 100, lng: 110, addr: '江苏省常州市新北区天合路2号' },
+                        { label: '无锡 (核心站)', lat: 300, lng: 140, addr: '江苏省无锡市梁溪区解放路188号' },
+                        { label: '丹阳 (开发区)', lat: 50, lng: 70, addr: '江苏省镇江市丹阳市开发区新和路' },
+                      ].map((landmark, i) => {
+                        const isSelected = editingStation?.address?.includes(landmark.label) || (!editingStation && i === 0);
+                        return (
+                          <div
+                            key={landmark.label}
+                            className="absolute flex flex-col items-center justify-center cursor-pointer"
+                            style={{ left: `${landmark.lat}px`, top: `${landmark.lng}px` }}
+                          >
+                            {isSelected ? (
+                              <>
+                                <span className="absolute inline-flex h-3 w-3 rounded-full bg-blue-400 opacity-75 animate-ping"></span>
+                                <MapPin size={14} className="text-blue-500 z-10" />
+                              </>
+                            ) : (
+                              <MapPin size={10} className="text-gray-500" />
+                            )}
+                            <span className={`text-[8px] mt-0.5 px-0.5 rounded select-none ${
+                              isSelected ? 'bg-blue-600 text-white font-bold' : 'bg-gray-800 text-gray-400'
+                            }`}>
+                              {landmark.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      <div className="absolute bottom-1.5 left-2 z-10 flex items-center bg-slate-900/80 px-2 py-0.5 rounded text-[8px] text-slate-500 font-mono">
+                        <MapPin size={8} className="mr-0.5 text-blue-500" />
+                        <span>高德地图 © 2026 AutoNavi</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* PV Section */}
+              {/* ===== Group 2: 光伏信息 ===== */}
               <div className="space-y-4">
-                <h4 className="font-bold text-gray-950 flex items-center border-l-2 border-blue-600 pl-2">光伏信息</h4>
+                <div className="flex items-center space-x-2 border-b border-gray-100 pb-2">
+                  <span className="w-1.5 h-3.5 bg-yellow-500 rounded-sm"></span>
+                  <h4 className="font-bold text-gray-950">光伏信息</h4>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
+                  {/* 光伏装机容量 */}
                   <div className="space-y-1">
-                    <label className="font-semibold text-gray-600">光伏装机容量 (Wp)</label>
-                    <input type="text" defaultValue="140000" className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none" />
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>光伏装机容量</label>
+                    <div className="relative flex items-center">
+                      <input name="pvCapacity" type="number" required defaultValue={editingStation?.pvCapacity || '150000'} placeholder="请输入光伏装机容量" className="w-full px-3 pr-10 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                      <span className="absolute right-3 text-gray-400 text-[10px] font-bold">Wp</span>
+                    </div>
                   </div>
+
+                  {/* 逆变器数量 */}
                   <div className="space-y-1">
-                    <label className="font-semibold text-gray-600">是否配置辐照仪</label>
-                    <select className="w-full px-3 py-1.5 border border-gray-200 rounded bg-white"><option value="no">否</option><option value="yes">是</option></select>
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>逆变器数量</label>
+                    <div className="relative flex items-center">
+                      <input name="pvInverterCount" type="number" required defaultValue={editingStation?.pvInverterCount || '8'} placeholder="请输入逆变器数量" className="w-full px-3 pr-10 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                      <span className="absolute right-3 text-gray-400 text-[10px]">台</span>
+                    </div>
                   </div>
+
+                  {/* 是否配置辐射仪 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>是否配置辐射仪</label>
+                    <select name="pvHasRadiometer" defaultValue={editingStation?.pvHasRadiometer || '否'} className="w-full px-3 py-1.5 border border-gray-200 rounded bg-white">
+                      <option value="是">是</option>
+                      <option value="否">否</option>
+                    </select>
+                  </div>
+
+                  {/* 是否允许光伏上网 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600">是否允许光伏上网</label>
+                    <select name="pvAllowGrid" defaultValue={editingStation?.pvAllowGrid || '否'} className="w-full px-3 py-1.5 border border-gray-200 rounded bg-white">
+                      <option value="是">是</option>
+                      <option value="否">否</option>
+                    </select>
+                  </div>
+
+                  {/* 光伏安装倾斜角度 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600">光伏安装倾斜角度</label>
+                    <input name="pvTiltAngle" type="text" defaultValue={editingStation?.pvTiltAngle || '15'} placeholder="0~90度" className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                  </div>
+
+                  {/* 光伏朝向角度 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600">光伏朝向角度</label>
+                    <input name="pvAzimuthAngle" type="text" defaultValue={editingStation?.pvAzimuthAngle || '0'} placeholder="-180~180度" className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== Group 3: 储能信息 ===== */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-gray-100 pb-2">
+                  <span className="w-1.5 h-3.5 bg-purple-500 rounded-sm"></span>
+                  <h4 className="font-bold text-gray-950">储能信息</h4>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* 储能装机容量 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>储能装机容量</label>
+                    <div className="relative flex items-center">
+                      <input name="essCapacity" type="number" required defaultValue={editingStation?.essCapacity || '3000'} placeholder="请输入储能装机容量" className="w-full px-3 pr-12 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                      <span className="absolute right-3 text-gray-400 text-[10px] font-bold">kWh</span>
+                    </div>
+                  </div>
+
+                  {/* 储能数量 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>储能数量</label>
+                    <div className="relative flex items-center">
+                      <input name="essCount" type="number" required defaultValue={editingStation?.essCount || '3'} placeholder="请输入储能数量" className="w-full px-3 pr-10 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                      <span className="absolute right-3 text-gray-400 text-[10px]">台</span>
+                    </div>
+                  </div>
+
+                  {/* 测算模型充放电次数 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>测算模型充放电次数</label>
+                    <div className="relative flex items-center">
+                      <input name="essCycles" type="number" required defaultValue={editingStation?.essCycles || '6000'} placeholder="请输入测算模型充放电次数" className="w-full px-3 pr-10 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                      <span className="absolute right-3 text-gray-400 text-[10px]">次</span>
+                    </div>
+                  </div>
+
+                  {/* DoD放电深度 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>DoD放电深度</label>
+                    <div className="relative flex items-center">
+                      <input name="essDod" type="number" required defaultValue={editingStation?.essDod || '90'} placeholder="请输入DoD放电深度" className="w-full px-3 pr-10 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                      <span className="absolute right-3 text-gray-400 text-[10px] font-bold">%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== Group 4: 充电站信息 ===== */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-gray-100 pb-2">
+                  <span className="w-1.5 h-3.5 bg-indigo-500 rounded-sm"></span>
+                  <h4 className="font-bold text-gray-950">充电站信息</h4>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* 充电桩数量 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600"><span className="text-red-500 mr-0.5">*</span>充电桩数量</label>
+                    <div className="relative flex items-center">
+                      <input name="chargingPileCount" type="number" required defaultValue={editingStation?.chargingPileCount || '12'} placeholder="请输入充电桩数量" className="w-full px-3 pr-10 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 font-mono" />
+                      <span className="absolute right-3 text-gray-400 text-[10px]">台</span>
+                    </div>
+                  </div>
+
+                  {/* 监控站点图片 */}
+                  <div className="space-y-1">
+                    <label className="font-semibold text-gray-600">监控站点图片</label>
+                    <div className="flex items-center space-x-3">
+                      <label className="cursor-pointer bg-gray-50 hover:bg-gray-100 border border-gray-200 transition rounded px-3 py-1.5 flex items-center space-x-1">
+                        <Plus size={12} className="text-gray-400" />
+                        <span>点击上传</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setDrawerImage(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      {drawerImage ? (
+                        <div className="relative w-10 h-10 rounded border border-gray-200 overflow-hidden group">
+                          <img src={drawerImage} alt="Preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setDrawerImage('')}
+                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-red-500"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-gray-400">（格式限jpg, png）</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== Group 5: 其他信息 ===== */}
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-gray-100 pb-2">
+                  <span className="w-1.5 h-3.5 bg-gray-500 rounded-sm"></span>
+                  <h4 className="font-bold text-gray-950">其他信息</h4>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-gray-600">保险，维保期限说明</label>
+                  <textarea
+                    name="insuranceRemark"
+                    rows={3}
+                    defaultValue={editingStation?.insuranceRemark || '电站设备承保，维保期限至2029年'}
+                    placeholder="请输入保险，维保截止时间说明(少于200个字符)"
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded outline-none focus:border-blue-500 resize-none"
+                  />
                 </div>
               </div>
 
               {/* Buttons */}
-              <div className="pt-4 border-t border-gray-100 flex justify-end space-x-2">
+              <div className="pt-4 border-t border-gray-100 flex justify-end space-x-2 bg-white sticky bottom-0 z-20">
                 <button type="button" onClick={() => setIsDrawerOpen(false)} className="px-4 py-1.5 border border-gray-200 rounded hover:bg-gray-50 font-semibold">取消</button>
                 <button type="submit" className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold">保存</button>
               </div>
@@ -1851,6 +2216,57 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
   const [layout, setLayout] = useState<'V' | 'H'>('H');
   const [isEditMode, setIsEditMode] = useState(false);
   const [addingNodeParent, setAddingNodeParent] = useState<string | null>(null);
+  const [devicesBackup, setDevicesBackup] = useState<any[]>([]);
+  const [isSyncingLocal, setIsSyncingLocal] = useState(false);
+
+  const handleSyncFromLocal = () => {
+    setIsSyncingLocal(true);
+    setTimeout(() => {
+      setIsSyncingLocal(false);
+      alert(`已成功从本地网关 (SN: 8842b5) 同步 [${activeStation.name}] 最新拓扑配置与节点！`);
+    }, 600);
+  };
+
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, deviceId: string) => {
+    e.dataTransfer.setData('text/plain', deviceId);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetParentName: string) => {
+    e.preventDefault();
+    const draggedDeviceId = e.dataTransfer.getData('text/plain');
+    if (!draggedDeviceId) return;
+
+    // Find the dragged device
+    const draggedDev = devices.find(d => d.id === draggedDeviceId);
+    if (!draggedDev) return;
+
+    // Don't parent to itself
+    if (draggedDev.name === targetParentName) return;
+
+    // Prevent loop parenting
+    if (draggedDev.parent === targetParentName) return;
+
+    // Update parent relation
+    setDevices((prev: any[]) => prev.map(d => d.id === draggedDeviceId ? { ...d, parent: targetParentName } : d));
+  };
+
+  const handleStartEdit = () => {
+    setDevicesBackup([...devices]);
+    setIsEditMode(true);
+  };
+
+  const handleSaveEdit = () => {
+    setIsEditMode(false);
+    // Sync to localStorage
+    const userDevices = devices.filter(d => !INITIAL_DEVICES.some(init => init.id === d.id));
+    localStorage.setItem('wizard_created_devices', JSON.stringify(userDevices));
+  };
+
+  const handleCancelEdit = () => {
+    setDevices(devicesBackup);
+    setIsEditMode(false);
+  };
 
   // Active station selection
   const activeStation = stations.find(s => s.name === stationName) || stations[0] || { name: '荣成中医院', id: 'CS1783648428' };
@@ -1878,7 +2294,7 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
       createdAt: new Date().toISOString().replace('T', ' ').split('.')[0]
     };
 
-    setDevices(prev => [...prev, newDev]);
+    setDevices((prev: any[]) => [...prev, newDev]);
     setAddingNodeParent(null);
   };
 
@@ -1908,11 +2324,21 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
                 {/* Storages */}
                 <div className="pl-3 space-y-1.5 border-l border-gray-200 ml-1.5">
                   {topoDevices.filter(d => d.type === '储能').map(d => (
-                    <div key={d.id} className="space-y-1">
-                      <div className="text-gray-600 font-semibold flex items-center">🔋 {d.name}</div>
+                    <div 
+                      key={d.id} 
+                      className="space-y-1"
+                      draggable={isEditMode}
+                      onDragStart={(e) => handleDragStart(e, d.id)}
+                    >
+                      <div className={`text-gray-600 font-semibold flex items-center ${isEditMode ? 'cursor-grab active:cursor-grabbing hover:bg-blue-50/50 rounded px-1' : ''}`}>🔋 {d.name}</div>
                       <div className="pl-3 ml-1 text-gray-400 space-y-0.5">
                         {topoDevices.filter(sub => sub.parent === d.name).map(sub => (
-                          <div key={sub.id} className="flex items-center">
+                          <div 
+                            key={sub.id} 
+                            className={`flex items-center ${isEditMode ? 'cursor-grab active:cursor-grabbing hover:bg-blue-50/50 rounded px-1' : ''}`}
+                            draggable={isEditMode}
+                            onDragStart={(e) => handleDragStart(e, sub.id)}
+                          >
                             <span className="text-[10px] mr-1">{sub.type === 'PCS' ? '🔌' : '🔋'}</span> {sub.name}
                           </div>
                         ))}
@@ -1945,17 +2371,60 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
             </div>
           </div>
 
-          <button onClick={() => setIsEditMode(!isEditMode)} className={`px-4 py-1 rounded text-[10px] font-bold shadow-sm transition-all ${isEditMode ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
-            {isEditMode ? '退出编辑' : '编辑拓扑'}
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleSyncFromLocal}
+              disabled={isSyncingLocal}
+              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-bold px-3 py-1.5 rounded shadow-sm text-[10px] transition-all flex items-center space-x-1 disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={isSyncingLocal ? "animate-spin text-emerald-600" : "text-emerald-600"} />
+              <span>从本地同步</span>
+            </button>
+
+            {isEditMode ? (
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={handleSaveEdit} 
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-1.5 rounded shadow-sm text-[10px] transition-all"
+                >
+                  保存
+                </button>
+                <button 
+                  onClick={handleCancelEdit} 
+                  className="bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-semibold px-4 py-1.5 rounded shadow-sm text-[10px] transition-all"
+                >
+                  取消
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={handleStartEdit} 
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-1.5 rounded shadow-sm text-[10px] transition-all"
+              >
+                编辑拓扑
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Warning info banner in Edit Mode */}
+        {isEditMode && (
+          <div className="bg-emerald-50 border-b border-emerald-100 px-4 py-2 flex items-center space-x-2 shrink-0">
+            <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold">!</span>
+            <span className="text-emerald-800 text-[11px] font-medium">⚠️ 您可以拖动设备图标编辑电力拓扑!</span>
+          </div>
+        )}
 
         {/* Visual Node Diagram Canvas */}
         <div className="flex-1 overflow-auto p-8 flex items-center justify-center min-h-[500px]">
           <div className={`flex ${layout === 'H' ? 'flex-row items-center space-x-12' : 'flex-col items-center space-y-12'} relative`}>
             
             {/* Level 1: Station Root */}
-            <div className="relative flex flex-col items-center">
+            <div 
+              className="relative flex flex-col items-center"
+              onDragOver={(e) => isEditMode && e.preventDefault()}
+              onDrop={(e) => isEditMode && handleDrop(e, '站点Bus')}
+            >
               <div className="bg-white border border-blue-200 rounded-lg p-3 w-40 shadow-sm border-l-4 border-l-blue-600">
                 <div className="font-bold text-gray-800 flex items-center">站点Bus</div>
                 <div className="text-[10px] text-gray-400 mt-1">编号: {activeStation.id.slice(0, 12)}</div>
@@ -1969,7 +2438,11 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
             <div className="relative flex flex-col items-center">
               <div className="flex space-x-3">
                 {/* Transformer Node */}
-                <div className="bg-white border border-amber-200 rounded-lg p-3 w-40 shadow-sm border-l-4 border-l-amber-500">
+                <div 
+                  className="bg-white border border-amber-200 rounded-lg p-3 w-40 shadow-sm border-l-4 border-l-amber-500"
+                  onDragOver={(e) => isEditMode && e.preventDefault()}
+                  onDrop={(e) => isEditMode && handleDrop(e, '变压器')}
+                >
                   <div className="font-bold text-gray-800 flex items-center">⚡ 变压器</div>
                   <div className="text-[10px] text-gray-400 mt-1">设备ID: THPT001</div>
                   <div className="text-[10px] text-gray-600 mt-0.5 font-semibold">主厂变压器A</div>
@@ -1991,7 +2464,11 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
             </div>
 
             {/* Level 3: Bus2 Node */}
-            <div className="relative flex flex-col items-center">
+            <div 
+              className="relative flex flex-col items-center"
+              onDragOver={(e) => isEditMode && e.preventDefault()}
+              onDrop={(e) => isEditMode && handleDrop(e, 'Bus2')}
+            >
               <div className="bg-white border border-indigo-200 rounded-lg p-3 w-40 shadow-sm border-l-4 border-l-indigo-500">
                 <div className="font-bold text-gray-800 flex items-center">📦 节点Bus</div>
                 <div className="text-[10px] text-gray-400 mt-1">节点名称</div>
@@ -2009,7 +2486,13 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
                   <div key={cabinet.id} className="flex items-center space-x-6 border border-dashed border-gray-200 rounded-lg p-3.5 bg-white shadow-sm relative">
                     
                     {/* Cabinet Card */}
-                    <div className="bg-white border border-green-200 rounded-lg p-2.5 w-36 border-l-4 border-l-green-500 shadow-sm relative">
+                    <div 
+                      className={`bg-white border border-green-200 rounded-lg p-2.5 w-36 border-l-4 border-l-green-500 shadow-sm relative ${isEditMode ? 'cursor-grab active:cursor-grabbing hover:border-blue-300' : ''}`}
+                      draggable={isEditMode}
+                      onDragStart={(e) => handleDragStart(e, cabinet.id)}
+                      onDragOver={(e) => isEditMode && e.preventDefault()}
+                      onDrop={(e) => isEditMode && handleDrop(e, cabinet.name)}
+                    >
                       <div className="font-bold text-gray-800 flex items-center justify-between">
                         <span>🔋 {cabinet.name}</span>
                         <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
@@ -2027,7 +2510,12 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
                     {/* Sub Nodes linked (e.g. PCS, Battery Cluster) */}
                     <div className="flex flex-col space-y-2">
                       {subNodes.map(sub => (
-                        <div key={sub.id} className="bg-gray-50 border border-gray-200 rounded p-1.5 w-32 flex items-center justify-between shadow-xs">
+                        <div 
+                          key={sub.id} 
+                          className={`bg-gray-50 border border-gray-200 rounded p-1.5 w-32 flex items-center justify-between shadow-xs ${isEditMode ? 'cursor-grab active:cursor-grabbing hover:border-blue-300' : ''}`}
+                          draggable={isEditMode}
+                          onDragStart={(e) => handleDragStart(e, sub.id)}
+                        >
                           <div>
                             <p className="font-semibold text-gray-700 text-[10px]">{sub.name}</p>
                             <p className="text-[8px] text-gray-400">{sub.model}</p>

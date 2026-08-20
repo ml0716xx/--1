@@ -2,14 +2,15 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { 
   Building2, MapPin, Server, BadgeDollarSign, ChevronLeft, Search, RotateCcw, Plus, User, Bell, Calendar, X, ChevronDown, RefreshCw,
-  ChevronRight, Check, AlertTriangle, Info, Sliders, Database, Play, Pause, Trash2, ArrowLeft, ExternalLink, Lock, Unlock, Package,
+  ChevronRight, Check, AlertTriangle, Info, Sliders, Database, Play, Pause, Trash2, ArrowLeft, ExternalLink, Lock, Unlock, Package, LogOut,
   Users, CheckSquare, Square, ShieldCheck, History, BookOpen, Sparkles, Send, Layout 
 } from 'lucide-react';
 import { GridWorkspaceContainer } from './components/GridWorkspace';
+import { StationSetupWizard } from './components/StationSetupWizard';
 
 // --- Types & Mock Data ---
 
-type Province = {
+export type Province = {
   id: string;
   name: string;
   level1Region: string;
@@ -23,7 +24,7 @@ type Province = {
   latestActualDate: string;
 };
 
-type SalesPrice = {
+export type SalesPrice = {
   id: string;
   level1Region: string;
   latestPredictedDate: string;
@@ -113,13 +114,13 @@ const STATIONS: Station[] = [
   }
 ];
 
-const SALES_PRICES: SalesPrice[] = [
+export const SALES_PRICES: SalesPrice[] = [
   { id: '1', level1Region: '湖北省', latestPredictedDate: '2026-05-21', latestSettlementDate: '2026-05-15', boundStationsCount: 3 },
   { id: '2', level1Region: '河南省', latestPredictedDate: '2026-05-24', latestSettlementDate: '2026-05-18', boundStationsCount: 0 },
   { id: '3', level1Region: '湖南省', latestPredictedDate: '2026-05-24', latestSettlementDate: '2026-05-18', boundStationsCount: 1 },
 ];
 
-const PROVINCES: Province[] = [
+export const PROVINCES: Province[] = [
   { id: '1', level1Region: '江苏省', name: '江苏省', priceName: '江苏省固定分时', usageType1: '单一制(100千伏安及以上)', usageType2: '工商业', voltage: '1~10（20）千伏', boundStationsCount: 1, latestMonth: '2026-05', latestPredictedDate: '2026-05-21', latestActualDate: '2026-05-18' },
   { id: '2', level1Region: '山东省', name: '山东省', priceName: '山东电价07', usageType1: '单一制', usageType2: '工商业', voltage: '1~10千伏', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24', latestActualDate: '2026-05-19' },
   { id: '3', level1Region: '山东省', name: '山东省', priceName: '山东电价06', usageType1: '单一制', usageType2: '工商业', voltage: '不满1千伏', boundStationsCount: 0, latestMonth: '2026-05', latestPredictedDate: '2026-05-24', latestActualDate: '2026-05-19' },
@@ -949,12 +950,100 @@ export const INITIAL_PUSH_RECORDS: PushRecord[] = [
 // --- Components ---
 
 export default function App() {
-  const [activeMenu, setActiveMenu] = useState('enterprise');
+  const [activeMenu, setActiveMenu] = useState('wizard');
   const [priceSubMenuOpen, setPriceSubMenuOpen] = useState(true);
+  const [autoOpenStation, setAutoOpenStation] = useState<any>(null);
   const [versionFeatureSubMenuOpen, setVersionFeatureSubMenuOpen] = useState(true);
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedProvince, setSelectedProvince] = useState<Province | null>(null);
   const [selectedSalesPrice, setSelectedSalesPrice] = useState<SalesPrice | null>(null);
+
+  // Authentication & Password Management State
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem('admin_logged_in') !== 'false';
+  });
+  const [adminPassword, setAdminPassword] = useState<string>(() => {
+    return localStorage.getItem('admin_password') || 'admin123';
+  });
+  const [userDropdownOpen, setUserDropdownOpen] = useState<boolean>(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState<boolean>(false);
+
+  // Login Form States
+  const [loginUsername, setLoginUsername] = useState<string>('admin');
+  const [loginPasswordInput, setLoginPasswordInput] = useState<string>('');
+  const [loginError, setLoginError] = useState<string>('');
+
+  // Change Password Form States
+  const [oldPasswordInput, setOldPasswordInput] = useState<string>('');
+  const [newPasswordInput, setNewPasswordInput] = useState<string>('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState<string>('');
+  const [passwordError, setPasswordError] = useState<string>('');
+  const [passwordSuccess, setPasswordSuccess] = useState<string>('');
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginUsername !== 'admin') {
+      setLoginError('用户名错误，目前仅支持系统内置管理员账号 admin');
+      return;
+    }
+    if (loginPasswordInput === adminPassword) {
+      setIsLoggedIn(true);
+      localStorage.setItem('admin_logged_in', 'true');
+      setLoginPasswordInput('');
+      setLoginError('');
+    } else {
+      setLoginError('密码输入错误，请重新输入');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    localStorage.setItem('admin_logged_in', 'false');
+    setUserDropdownOpen(false);
+  };
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (oldPasswordInput !== adminPassword) {
+      setPasswordError('原密码输入错误');
+      return;
+    }
+    if (!newPasswordInput) {
+      setPasswordError('新密码不能为空');
+      return;
+    }
+    if (newPasswordInput.length < 6) {
+      setPasswordError('新密码长度不能少于6位');
+      return;
+    }
+    if (newPasswordInput === oldPasswordInput) {
+      setPasswordError('新密码不能与原密码相同');
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPasswordError('两次输入的新密码不一致');
+      return;
+    }
+
+    // Success! Update password
+    setAdminPassword(newPasswordInput);
+    localStorage.setItem('admin_password', newPasswordInput);
+    setPasswordSuccess('密码修改成功！');
+    
+    // Clear inputs
+    setOldPasswordInput('');
+    setNewPasswordInput('');
+    setConfirmPasswordInput('');
+
+    // Close modal after 1.5s
+    setTimeout(() => {
+      setShowChangePasswordModal(false);
+      setPasswordSuccess('');
+    }, 1500);
+  };
 
   // Versions & Features State Management
   const [versions, setVersions] = useState<Version[]>(INITIAL_VERSIONS);
@@ -987,6 +1076,76 @@ export default function App() {
     setView('list');
   };
 
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 font-sans text-gray-800">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="p-8">
+            <div className="flex flex-col items-center mb-6">
+              <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-md mb-4">
+                <div className="w-5 h-5 bg-white rounded"></div>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 tracking-tight">智能微网管理后台</h2>
+              <p className="text-xs text-gray-400 mt-1">Microgrid Intelligent Management System</p>
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                  账号
+                </label>
+                <input 
+                  type="text" 
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white outline-none focus:border-blue-500 font-medium text-gray-800"
+                  placeholder="请输入用户名"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                  密码
+                </label>
+                <input 
+                  type="password" 
+                  value={loginPasswordInput}
+                  onChange={(e) => setLoginPasswordInput(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white outline-none focus:border-blue-500 font-medium text-gray-800"
+                  placeholder="请输入密码"
+                  required
+                />
+              </div>
+
+              {loginError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600 font-medium flex items-center space-x-1.5">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  <span>{loginError}</span>
+                </div>
+              )}
+
+              <button 
+                type="submit" 
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold shadow-sm transition-colors mt-6"
+              >
+                登录系统
+              </button>
+            </form>
+
+            <div className="mt-6 pt-6 border-t border-gray-100 text-center">
+              <div className="inline-block px-3 py-1.5 bg-blue-50/50 rounded-full border border-blue-100/50">
+                <span className="text-[10px] text-blue-600 font-medium">
+                  💡 默认管理员账号: <strong className="font-bold">admin</strong> / 默认初始密码: <strong className="font-bold">admin123</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-800">
       {/* Sidebar */}
@@ -1002,6 +1161,7 @@ export default function App() {
 
         <div className="p-3 text-[11px] font-bold text-gray-400 uppercase tracking-wider block">导航菜单</div>
         <nav className="flex-1 px-2 space-y-1 overflow-y-auto pb-4">
+          <NavItem icon={<Sparkles size={16} />} label="建站向导" active={activeMenu === 'wizard'} onClick={() => navTo('wizard')} />
           <NavItem icon={<Building2 size={16} />} label="企业管理" active={activeMenu === 'enterprise'} onClick={() => navTo('enterprise')} />
           <NavItem icon={<MapPin size={16} />} label="站点管理" active={activeMenu === 'site'} onClick={() => navTo('site')} />
           <NavItem icon={<Server size={16} />} label="设备管理" active={activeMenu === 'device'} onClick={() => navTo('device')} />
@@ -1129,7 +1289,8 @@ export default function App() {
                activeMenu === 'permission-directory' ? '权限目录' :
                activeMenu === 'site' ? '站点管理' :
                activeMenu === 'device' ? '设备管理' :
-               activeMenu === 'enterprise' ? '企业管理' : '后台模块'}
+               activeMenu === 'enterprise' ? '企业管理' :
+               activeMenu === 'wizard' ? '建站向导' : '后台模块'}
             </span>
             {view === 'detail' && (selectedProvince || selectedSalesPrice) && (
               <>
@@ -1144,11 +1305,48 @@ export default function App() {
             <button className="text-gray-500 hover:text-gray-700">
               <Bell size={18} />
             </button>
-            <div className="flex items-center space-x-2 cursor-pointer">
-              <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-600">
-                <User size={16} />
+            
+            {/* User Profile Dropdown */}
+            <div className="relative">
+              <div 
+                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1.5 rounded-lg transition-colors select-none"
+              >
+                <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 shadow-inner">
+                  <User size={16} />
+                </div>
+                <span className="text-sm font-medium text-gray-700">管理员</span>
+                <ChevronDown size={14} className={`text-gray-400 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
               </div>
-              <span className="text-sm font-medium">管理员</span>
+
+              {userDropdownOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setUserDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-1.5 w-44 bg-white rounded-lg shadow-lg border border-gray-100 py-1.5 z-50 text-xs text-gray-700 animate-in fade-in slide-in-from-top-1 duration-100">
+                    <button 
+                      onClick={() => {
+                        setShowChangePasswordModal(true);
+                        setUserDropdownOpen(false);
+                      }}
+                      className="w-full flex items-center px-3 py-2 hover:bg-gray-50 text-left transition-colors font-medium text-gray-600 hover:text-gray-900"
+                    >
+                      <Lock size={14} className="mr-2 text-gray-400" />
+                      修改密码
+                    </button>
+                    <div className="h-px bg-gray-100 my-1"></div>
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full flex items-center px-3 py-2 hover:bg-red-50 text-red-600 text-left transition-colors font-medium"
+                    >
+                      <LogOut size={14} className="mr-2 text-red-400" />
+                      退出登录
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </header>
@@ -1171,16 +1369,32 @@ export default function App() {
             <GridWorkspaceContainer 
               activeTab={activeMenu}
               setActiveTab={setActiveMenu}
+              initialWorkspaceStation={autoOpenStation}
+              clearInitialWorkspaceStation={() => setAutoOpenStation(null)}
+              versions={versions}
+              featurePacks={featurePacks}
+            />
+          ) : activeMenu === 'wizard' ? (
+            <StationSetupWizard 
+              onComplete={(station) => {
+                setAutoOpenStation(station);
+                setActiveMenu('site');
+              }} 
+              versions={versions}
+              featurePacks={featurePacks}
+              enterprises={enterprises}
             />
           ) : activeMenu === 'version-manage' ? (
             <VersionManagePanel 
               versions={versions} 
               setVersions={setVersions} 
+              enterprises={enterprises}
             />
           ) : activeMenu === 'feature-manage' ? (
             <FeatureManagePanel 
               featurePacks={featurePacks} 
               setFeaturePacks={setFeaturePacks} 
+              enterprises={enterprises}
             />
           ) : activeMenu === 'enterprise-assign' ? (
             <EnterpriseAssignPanel 
@@ -1205,6 +1419,111 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* 3. Change Password Modal */}
+      {showChangePasswordModal && (
+        <div className="fixed inset-0 bg-black/45 flex items-center justify-center z-50 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-100 flex flex-col">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <h3 className="font-bold text-gray-800 text-xs flex items-center space-x-1">
+                <Lock size={14} className="text-blue-500" />
+                <span>修改管理员密码</span>
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowChangePasswordModal(false);
+                  setPasswordError('');
+                  setPasswordSuccess('');
+                }} 
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePassword}>
+              <div className="p-5 space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    原密码
+                  </label>
+                  <input 
+                    type="password"
+                    value={oldPasswordInput}
+                    onChange={(e) => setOldPasswordInput(e.target.value)}
+                    required
+                    placeholder="请输入当前密码"
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-blue-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    新密码 (不低于6位)
+                  </label>
+                  <input 
+                    type="password"
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    required
+                    placeholder="请输入新密码"
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-blue-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">
+                    确认新密码
+                  </label>
+                  <input 
+                    type="password"
+                    value={confirmPasswordInput}
+                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                    required
+                    placeholder="请再次输入新密码"
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-blue-500 font-medium"
+                  />
+                </div>
+
+                {passwordError && (
+                  <div className="p-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600 font-medium flex items-center space-x-1">
+                    <AlertTriangle size={13} className="shrink-0" />
+                    <span>{passwordError}</span>
+                  </div>
+                )}
+
+                {passwordSuccess && (
+                  <div className="p-2.5 bg-green-50 border border-green-100 rounded-lg text-xs text-green-600 font-medium flex items-center space-x-1">
+                    <Check size={13} className="shrink-0" />
+                    <span>{passwordSuccess}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3 bg-gray-50 border-t border-gray-100 flex justify-end space-x-2">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowChangePasswordModal(false);
+                    setPasswordError('');
+                    setPasswordSuccess('');
+                  }}
+                  className="px-3 py-1.5 border border-gray-200 rounded text-xs text-gray-600 hover:bg-gray-100 font-semibold"
+                >
+                  取消
+                </button>
+                <button 
+                  type="submit"
+                  disabled={!!passwordSuccess}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-sm transition-colors disabled:opacity-55"
+                >
+                  确认修改
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1915,8 +2234,6 @@ function OldStationManagement() {
                       >
                         编辑
                       </button>
-                      <button className="px-2 py-1 text-blue-600 border border-blue-200 rounded hover:bg-blue-50 text-xs transition-colors">管理设备</button>
-                      <button className="px-2 py-1 text-blue-600 border border-blue-200 rounded hover:bg-blue-50 text-xs transition-colors">管理拓扑</button>
                       <button 
                         onClick={() => handleDelete(s.id)}
                         className="px-2 py-1 text-[#ff4d4f] border border-red-100 rounded hover:bg-red-50 text-xs transition-colors"
@@ -3738,13 +4055,17 @@ function PermissionSelectionTree({ selectedPerms, onChange, searchQuery = '' }: 
 interface VersionManagePanelProps {
   versions: Version[];
   setVersions: React.Dispatch<React.SetStateAction<Version[]>>;
+  enterprises: EnterpriseAssign[];
 }
 
-function VersionManagePanel({ versions, setVersions }: VersionManagePanelProps) {
-  const [expandedVersionId, setExpandedVersionId] = useState<string | null>(null);
+function VersionManagePanel({ versions, setVersions, enterprises }: VersionManagePanelProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVersion, setEditingVersion] = useState<Version | null>(null);
   const [permSearch, setPermSearch] = useState('');
+
+  // Delete modal state
+  const [confirmDeleteVersion, setConfirmDeleteVersion] = useState<Version | null>(null);
+  const [showDeleteDetails, setShowDeleteDetails] = useState(false);
 
   // Form Fields
   const [name, setName] = useState('');
@@ -3757,7 +4078,8 @@ function VersionManagePanel({ versions, setVersions }: VersionManagePanelProps) 
   const openCreateModal = () => {
     setEditingVersion(null);
     setName('');
-    setCode('');
+    const randomSuffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+    setCode(`VER_${randomSuffix}`);
     setOrder(versions.length + 1);
     setDescription('');
     setSelectedPerms([]);
@@ -3815,9 +4137,15 @@ function VersionManagePanel({ versions, setVersions }: VersionManagePanelProps) 
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('确认删除此版本？删除后不可恢复。')) {
-      setVersions(prev => prev.filter(v => v.id !== id));
+  const handleDelete = (v: Version) => {
+    setConfirmDeleteVersion(v);
+    setShowDeleteDetails(false);
+  };
+
+  const executeDelete = () => {
+    if (confirmDeleteVersion) {
+      setVersions(prev => prev.filter(v => v.id !== confirmDeleteVersion.id));
+      setConfirmDeleteVersion(null);
     }
   };
 
@@ -3852,66 +4180,32 @@ function VersionManagePanel({ versions, setVersions }: VersionManagePanelProps) 
           </thead>
           <tbody className="divide-y divide-gray-200">
             {versions.map(v => {
-              const isExpanded = expandedVersionId === v.id;
               const menuCount = ALL_PERMISSIONS.filter(cat => 
                 cat.items.some(i => v.permissions.includes(i.code))
               ).length;
               const buttonCount = v.permissions.length;
 
               return (
-                <React.Fragment key={v.id}>
-                  <tr className="hover:bg-gray-50/70 transition-colors">
-                    <td className="px-4 py-3 text-xs font-mono font-bold text-gray-500">{v.order}</td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-bold text-gray-900">{v.name}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 font-mono text-[10px] rounded font-semibold">{v.code}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <button 
-                        onClick={() => setExpandedVersionId(isExpanded ? null : v.id)}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center hover:underline focus:outline-none"
-                      >
-                        {menuCount}项主菜单 / {buttonCount}个动作权限
-                        <ChevronRight size={12} className={`ml-1 transform transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 max-w-xs truncate text-xs text-gray-500" title={v.description}>
-                      {v.description}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-400 font-mono">{v.createdAt}</td>
-                    <td className="px-4 py-3 text-right space-x-3">
-                      <button onClick={() => openEditModal(v)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">编辑</button>
-                      <button onClick={() => handleDelete(v.id)} className="text-xs text-red-600 hover:text-red-800 font-semibold">删除</button>
-                    </td>
-                  </tr>
-
-                  {isExpanded && (
-                    <tr className="bg-gray-50/40">
-                      <td colSpan={7} className="px-6 py-3 border-l-4 border-blue-500">
-                        <div className="space-y-2">
-                          <h4 className="text-[11px] font-bold text-gray-700">关联的权限列表：</h4>
-                          <div className="flex flex-wrap gap-1.5">
-                            {v.permissions.length === 0 ? (
-                              <span className="text-xs text-gray-400 italic">暂无分配权限</span>
-                            ) : (
-                              v.permissions.map(code => {
-                                const matchedItem = ALL_PERMISSIONS.flatMap(cat => cat.items).find(i => i.code === code);
-                                return (
-                                  <span key={code} className="inline-flex flex-col px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[9px] shadow-sm">
-                                    <span className="font-bold text-gray-800">{matchedItem?.name || code}</span>
-                                    <span className="font-mono text-gray-400 text-[8px]">{code}</span>
-                                  </span>
-                                );
-                              })
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                <tr key={v.id} className="hover:bg-gray-50/70 transition-colors">
+                  <td className="px-4 py-3 text-xs font-mono font-bold text-gray-500">{v.order}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs font-bold text-gray-900">{v.name}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 font-mono text-[10px] rounded font-semibold">{v.code}</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 font-medium">
+                    {menuCount}项主菜单 / {buttonCount}个动作权限
+                  </td>
+                  <td className="px-4 py-3 max-w-xs truncate text-xs text-gray-500" title={v.description}>
+                    {v.description}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-400 font-mono">{v.createdAt}</td>
+                  <td className="px-4 py-3 text-right space-x-3">
+                    <button onClick={() => openEditModal(v)} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">编辑</button>
+                    <button onClick={() => handleDelete(v)} className="text-xs text-red-600 hover:text-red-800 font-semibold">删除</button>
+                  </td>
+                </tr>
               );
             })}
           </tbody>
@@ -3921,7 +4215,7 @@ function VersionManagePanel({ versions, setVersions }: VersionManagePanelProps) 
       {/* Drawer Dialog */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex justify-end z-50">
-          <div className="w-[500px] bg-white h-full shadow-2xl flex flex-col">
+          <div className="w-[500px] bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
             <div className="p-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
               <h3 className="font-bold text-gray-800 text-sm">
                 {editingVersion ? `📝 编辑版本：${editingVersion.name}` : '➕ 新建版本'}
@@ -3947,17 +4241,18 @@ function VersionManagePanel({ versions, setVersions }: VersionManagePanelProps) 
                     placeholder="如：标准版"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-medium text-gray-800"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">唯一编码 (不可重复) <span className="text-red-500">*</span></label>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">唯一编码 (系统自动生成) <span className="text-red-500">*</span></label>
                   <input 
                     type="text" 
-                    placeholder="如：standard"
+                    placeholder="系统自动生成"
                     value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    disabled={true}
+                    readOnly={true}
+                    className="w-full border border-gray-200 bg-gray-100 text-gray-500 font-mono rounded px-2.5 py-1 text-xs cursor-not-allowed outline-none select-none"
                   />
                 </div>
               </div>
@@ -4024,6 +4319,78 @@ function VersionManagePanel({ versions, setVersions }: VersionManagePanelProps) 
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal with Enterprise Details */}
+      {confirmDeleteVersion && (() => {
+        const boundEnts = enterprises.filter(e => e.baseVersionId === confirmDeleteVersion.code);
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
+              <div className="p-5 border-b border-gray-100 bg-gray-50 flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center text-red-600">
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">确认删除版本</h3>
+                  <p className="text-[10px] text-gray-400">请核对受影响的绑定企业信息</p>
+                </div>
+              </div>
+              
+              <div className="p-5 space-y-4">
+                <div className="p-3 bg-amber-50/60 border border-amber-100 rounded-lg text-xs text-amber-800 leading-relaxed">
+                  您正在尝试删除版本 <strong className="font-bold text-gray-900">[{confirmDeleteVersion.name}]</strong> (编码: <span className="font-mono text-gray-700 bg-white px-1 py-0.5 rounded text-[10px] border border-gray-200">{confirmDeleteVersion.code}</span>)。
+                  <div className="mt-1.5 font-semibold text-gray-950 flex items-center">
+                    🚨 当前有 <span className="text-red-600 text-sm font-bold mx-1">{boundEnts.length}</span> 家企业绑定了该版本。
+                  </div>
+                </div>
+
+                {boundEnts.length > 0 && (
+                  <div className="space-y-2">
+                    <button 
+                      type="button"
+                      onClick={() => setShowDeleteDetails(!showDeleteDetails)}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center focus:outline-none"
+                    >
+                      <span>{showDeleteDetails ? '收起企业明细' : '展开查看企业明细'}</span>
+                      <ChevronRight size={14} className={`ml-0.5 transition-transform ${showDeleteDetails ? 'rotate-90' : ''}`} />
+                    </button>
+
+                    {showDeleteDetails && (
+                      <div className="border border-gray-200 rounded-lg bg-gray-50/50 max-h-[160px] overflow-y-auto p-2 space-y-1.5 divide-y divide-gray-100">
+                        {boundEnts.map(ent => (
+                          <div key={ent.id} className="text-[11px] pt-1.5 first:pt-0 flex justify-between items-center text-gray-750">
+                            <span className="font-semibold text-gray-900 truncate max-w-[240px]">{ent.name}</span>
+                            <span className="text-gray-500 font-mono text-[10px] bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-sm shrink-0">
+                              {ent.validityEnd === '无限期' ? '无限期' : `${ent.validityStart} ~ ${ent.validityEnd}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3.5 bg-gray-50 border-t border-gray-150 flex justify-end space-x-2">
+                <button 
+                  type="button"
+                  onClick={() => setConfirmDeleteVersion(null)}
+                  className="px-3.5 py-1.5 border border-gray-350 bg-white rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  取消
+                </button>
+                <button 
+                  type="button"
+                  onClick={executeDelete}
+                  className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold shadow-sm transition-colors"
+                >
+                  确认删除
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -4035,13 +4402,18 @@ function VersionManagePanel({ versions, setVersions }: VersionManagePanelProps) 
 interface FeatureManagePanelProps {
   featurePacks: FeaturePack[];
   setFeaturePacks: React.Dispatch<React.SetStateAction<FeaturePack[]>>;
+  enterprises: EnterpriseAssign[];
 }
 
-function FeatureManagePanel({ featurePacks, setFeaturePacks }: FeatureManagePanelProps) {
+function FeatureManagePanel({ featurePacks, setFeaturePacks, enterprises }: FeatureManagePanelProps) {
   const [activeTab, setActiveTab] = useState<'all' | 'architecture' | 'strategy' | 'basic'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPack, setEditingPack] = useState<FeaturePack | null>(null);
   const [permSearch, setPermSearch] = useState('');
+
+  // Delete modal state
+  const [confirmDeletePack, setConfirmDeletePack] = useState<FeaturePack | null>(null);
+  const [showDeleteDetails, setShowDeleteDetails] = useState(false);
 
   // Form Fields
   const [name, setName] = useState('');
@@ -4057,7 +4429,8 @@ function FeatureManagePanel({ featurePacks, setFeaturePacks }: FeatureManagePane
   const openCreateModal = () => {
     setEditingPack(null);
     setName('');
-    setCode('');
+    const randomSuffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+    setCode(`FEAT_${randomSuffix}`);
     setCategory('strategy');
     setDescription('');
     setOrder(featurePacks.length + 1);
@@ -4116,10 +4489,16 @@ function FeatureManagePanel({ featurePacks, setFeaturePacks }: FeatureManagePane
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = (pack: FeaturePack, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('是否要删除该特性包？')) {
-      setFeaturePacks(prev => prev.filter(p => p.id !== id));
+    setConfirmDeletePack(pack);
+    setShowDeleteDetails(false);
+  };
+
+  const executeDelete = () => {
+    if (confirmDeletePack) {
+      setFeaturePacks(prev => prev.filter(p => p.id !== confirmDeletePack.id));
+      setConfirmDeletePack(null);
     }
   };
 
@@ -4220,7 +4599,7 @@ function FeatureManagePanel({ featurePacks, setFeaturePacks }: FeatureManagePane
                   配置编辑
                 </button>
                 <button 
-                  onClick={(e) => handleDelete(pack.id, e)}
+                  onClick={(e) => handleDelete(pack, e)}
                   className="p-1 text-red-600 hover:text-red-800 rounded transition-colors"
                 >
                   <Trash2 size={13} />
@@ -4241,7 +4620,7 @@ function FeatureManagePanel({ featurePacks, setFeaturePacks }: FeatureManagePane
       {/* Drawer Dialog */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex justify-end z-50">
-          <div className="w-[500px] bg-white h-full shadow-2xl flex flex-col">
+          <div className="w-[500px] bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
             <div className="p-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
               <h3 className="font-bold text-gray-800 text-sm">
                 {editingPack ? `📝 编辑特性包：${editingPack.name}` : '📦 新建高级特性包'}
@@ -4267,17 +4646,18 @@ function FeatureManagePanel({ featurePacks, setFeaturePacks }: FeatureManagePane
                     placeholder="如：AI排程"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-medium text-gray-800"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">特性编码 (不可重复) <span className="text-red-500">*</span></label>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">特性编码 (系统自动生成) <span className="text-red-500">*</span></label>
                   <input 
                     type="text" 
-                    placeholder="如：ai-scheduler"
+                    placeholder="系统自动生成"
                     value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    className="w-full border border-gray-300 rounded px-2.5 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                    disabled={true}
+                    readOnly={true}
+                    className="w-full border border-gray-200 bg-gray-100 text-gray-500 font-mono rounded px-2.5 py-1 text-xs cursor-not-allowed outline-none select-none"
                   />
                 </div>
               </div>
@@ -4356,6 +4736,81 @@ function FeatureManagePanel({ featurePacks, setFeaturePacks }: FeatureManagePane
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal with Enterprise Details */}
+      {confirmDeletePack && (() => {
+        const boundEnts = enterprises.filter(ent => ent.features.some(f => f.featureId === confirmDeletePack.code));
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
+              <div className="p-5 border-b border-gray-100 bg-gray-50 flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center text-red-600">
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">确认删除特性包</h3>
+                  <p className="text-[10px] text-gray-400">请核对受影响的绑定企业信息</p>
+                </div>
+              </div>
+              
+              <div className="p-5 space-y-4">
+                <div className="p-3 bg-amber-50/60 border border-amber-100 rounded-lg text-xs text-amber-800 leading-relaxed">
+                  您正在尝试删除特性包 <strong className="font-bold text-gray-900">[{confirmDeletePack.name}]</strong> (编码: <span className="font-mono text-gray-700 bg-white px-1 py-0.5 rounded text-[10px] border border-gray-200">{confirmDeletePack.code}</span>)。
+                  <div className="mt-1.5 font-semibold text-gray-950 flex items-center">
+                    🚨 当前有 <span className="text-red-600 text-sm font-bold mx-1">{boundEnts.length}</span> 家企业绑定了该特性包。
+                  </div>
+                </div>
+
+                {boundEnts.length > 0 && (
+                  <div className="space-y-2">
+                    <button 
+                      type="button"
+                      onClick={() => setShowDeleteDetails(!showDeleteDetails)}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center focus:outline-none"
+                    >
+                      <span>{showDeleteDetails ? '收起企业明细' : '展开查看企业明细'}</span>
+                      <ChevronRight size={14} className={`ml-0.5 transition-transform ${showDeleteDetails ? 'rotate-90' : ''}`} />
+                    </button>
+
+                    {showDeleteDetails && (
+                      <div className="border border-gray-200 rounded-lg bg-gray-50/50 max-h-[160px] overflow-y-auto p-2 space-y-1.5 divide-y divide-gray-100">
+                        {boundEnts.map(ent => {
+                          const activeFeat = ent.features.find(f => f.featureId === confirmDeletePack.code);
+                          return (
+                            <div key={ent.id} className="text-[11px] pt-1.5 first:pt-0 flex justify-between items-center text-gray-750">
+                              <span className="font-semibold text-gray-900 truncate max-w-[240px]">{ent.name}</span>
+                              <span className="text-gray-500 font-mono text-[10px] bg-white border border-gray-200 px-1.5 py-0.5 rounded shadow-sm shrink-0">
+                                {activeFeat ? `${activeFeat.startDate} ~ ${activeFeat.endDate}` : '已开通'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3.5 bg-gray-50 border-t border-gray-150 flex justify-end space-x-2">
+                <button 
+                  type="button"
+                  onClick={() => setConfirmDeletePack(null)}
+                  className="px-3.5 py-1.5 border border-gray-350 bg-white rounded text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  取消
+                </button>
+                <button 
+                  type="button"
+                  onClick={executeDelete}
+                  className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold shadow-sm transition-colors"
+                >
+                  确认删除
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

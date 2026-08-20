@@ -1,5 +1,6 @@
 {
   "name": "微网动态电价管理",
-  "description": "",
-  "requestFramePermissions": []
+  "description": "微电网站点拓扑配置、设备管理与电价策略工作台",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
