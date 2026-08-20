@@ -179,6 +179,120 @@ const MOCK_THING_MODELS = [
   { id: 'TM08', name: '电表物模型 v1.1', deviceType: '电表', version: 'v1.1', product: '电表产品系列' },
 ];
 
+// Mock devices matching screenshot
+const DEFAULT_SCREENSHOT_DEVICES = [
+  {
+    id: 'THGATE0000IFXV3QGG30N',
+    name: 'EMS网关',
+    type: 'EMS',
+    sn: 'TRINASTORAGE94',
+    model: 'FCU2601',
+    parent: '荣成市妇幼保健院',
+    station: '荣成市妇幼保健院',
+    enterprise: '威海市荣成市妇幼保健院',
+    createdAt: '2026-08-18 16:46:14'
+  },
+  {
+    id: 'THBESSPCS0TD08TI0724F',
+    name: '储能柜-3#PCS数据',
+    type: 'PCS',
+    sn: 'TRINASTORAGE82_PCS03',
+    model: 'PCS',
+    parent: '储能柜-3#',
+    station: '宣城华纳新材料-2#站',
+    enterprise: '安徽省宣城市华纳新材料科技',
+    createdAt: '2026-08-18 16:36:50'
+  },
+  {
+    id: 'THBESSPCS0PCIDF2LL7EF',
+    name: '储能柜-6#PCS数据',
+    type: 'PCS',
+    sn: 'TRINASTORAGE82_PCS06',
+    model: 'PCS',
+    parent: '储能柜-6#',
+    station: '宣城华纳新材料-2#站',
+    enterprise: '安徽省宣城市华纳新材料科技',
+    createdAt: '2026-08-18 16:36:50'
+  },
+  {
+    id: 'THBESSPCS0LUKZAIW3SXF',
+    name: '储能柜-1#PCS数据',
+    type: 'PCS',
+    sn: 'TRINASTORAGE82_PCS01',
+    model: 'PCS',
+    parent: '储能柜-1#',
+    station: '宣城华纳新材料-2#站',
+    enterprise: '安徽省宣城市华纳新材料科技',
+    createdAt: '2026-08-18 16:36:50'
+  },
+  {
+    id: 'THBESSPCS0J3J9INGN4FF',
+    name: '储能柜-5#PCS数据',
+    type: 'PCS',
+    sn: 'TRINASTORAGE82_PCS05',
+    model: 'PCS',
+    parent: '储能柜-5#',
+    station: '宣城华纳新材料-2#站',
+    enterprise: '安徽省宣城市华纳新材料科技',
+    createdAt: '2026-08-18 16:36:50'
+  },
+  {
+    id: 'THBESSPCS05PB4FJI9QEF',
+    name: '储能柜-2#PCS数据',
+    type: 'PCS',
+    sn: 'TRINASTORAGE82_PCS02',
+    model: 'PCS',
+    parent: '储能柜-2#',
+    station: '宣城华纳新材料-2#站',
+    enterprise: '安徽省宣城市华纳新材料科技',
+    createdAt: '2026-08-18 16:36:50'
+  },
+  {
+    id: 'THBESSPCS02Y9O4E8KHRF',
+    name: '储能柜-4#PCS数据',
+    type: 'PCS',
+    sn: 'TRINASTORAGE82_PCS04',
+    model: 'PCS',
+    parent: '储能柜-4#',
+    station: '宣城华纳新材料-2#站',
+    enterprise: '安徽省宣城市华纳新材料科技',
+    createdAt: '2026-08-18 16:36:50'
+  },
+  {
+    id: 'THBESSAIR0ZCK2JO7S9UF',
+    name: '储能柜-4#液冷机数据',
+    type: '储能空调',
+    sn: 'TRINASTORAGE82_TMS04',
+    model: '12345',
+    parent: '储能柜-4#',
+    station: '宣城华纳新材料-2#站',
+    enterprise: '安徽省宣城市华纳新材料科技',
+    createdAt: '2026-08-18 16:36:50'
+  },
+  {
+    id: 'THBESSAIR0WUIHPZO6Y5F',
+    name: '储能柜-2#液冷机数据',
+    type: '储能空调',
+    sn: 'TRINASTORAGE82_TMS02',
+    model: '12345',
+    parent: '储能柜-2#',
+    station: '宣城华纳新材料-2#站',
+    enterprise: '安徽省宣城市华纳新材料科技',
+    createdAt: '2026-08-18 16:36:50'
+  },
+  {
+    id: 'THBESSAIR0KUTVO69PSNF',
+    name: '储能柜-6#液冷机数据',
+    type: '储能空调',
+    sn: 'TRINASTORAGE82_TMS06',
+    model: '12345',
+    parent: '储能柜-6#',
+    station: '宣城华纳新材料-2#站',
+    enterprise: '安徽省宣城市华纳新材料科技',
+    createdAt: '2026-08-18 16:36:50'
+  }
+];
+
 interface StationWorkspaceProps {
   station: any;
   onClose: () => void;
@@ -951,34 +1065,151 @@ export function StationWorkspace({
     return Object.entries(counts).map(([type, value]) => ({ type, value }));
   }, [stationDevices]);
 
-  // Filters for Tab 2 (Device Management)
-  const [deviceSearch, setDeviceSearch] = useState('');
-  const [deviceTypeFilter, setDeviceTypeFilter] = useState('');
-  const [deviceStatusFilter, setDeviceStatusFilter] = useState('');
+  // ==================== TAB 2 (Device Management) STATES & FILTERS ====================
+  const [filterDeviceId, setFilterDeviceId] = useState('');
+  const [filterDeviceName, setFilterDeviceName] = useState('');
+  const [filterDeviceType, setFilterDeviceType] = useState('');
+  const [filterDeviceSn, setFilterDeviceSn] = useState('');
+  const [filterDeviceModel, setFilterDeviceModel] = useState('');
+  const [filterStation, setFilterStation] = useState('');
+  const [filterEnterprise, setFilterEnterprise] = useState('');
 
-  const filteredDevices = useMemo(() => {
-    return stationDevices.filter(d => {
-      const matchSearch = d.name.toLowerCase().includes(deviceSearch.toLowerCase()) || d.sn.toLowerCase().includes(deviceSearch.toLowerCase());
-      const matchType = !deviceTypeFilter || d.type === deviceTypeFilter;
-      // Mocking status mapping for filtering
-      const status = d.status || (d.id.charCodeAt(0) % 3 === 0 ? 'alarm' : d.id.charCodeAt(0) % 5 === 0 ? 'offline' : 'online');
-      const matchStatus = !deviceStatusFilter || status === deviceStatusFilter;
-      return matchSearch && matchType && matchStatus;
+  const [appliedFilters, setAppliedFilters] = useState({
+    deviceId: '',
+    deviceName: '',
+    deviceType: '',
+    deviceSn: '',
+    deviceModel: '',
+    station: '',
+    enterprise: ''
+  });
+
+  const handleSearchClick = () => {
+    setAppliedFilters({
+      deviceId: filterDeviceId,
+      deviceName: filterDeviceName,
+      deviceType: filterDeviceType,
+      deviceSn: filterDeviceSn,
+      deviceModel: filterDeviceModel,
+      station: filterStation,
+      enterprise: filterEnterprise
     });
-  }, [stationDevices, deviceSearch, deviceTypeFilter, deviceStatusFilter]);
+    setCurrentPage(1);
+  };
+
+  const handleResetClick = () => {
+    setFilterDeviceId('');
+    setFilterDeviceName('');
+    setFilterDeviceType('');
+    setFilterDeviceSn('');
+    setFilterDeviceModel('');
+    setFilterStation('');
+    setFilterEnterprise('');
+    setAppliedFilters({
+      deviceId: '',
+      deviceName: '',
+      deviceType: '',
+      deviceSn: '',
+      deviceModel: '',
+      station: '',
+      enterprise: ''
+    });
+    setCurrentPage(1);
+  };
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [jumpPageInput, setJumpPageInput] = useState('');
 
   // Modals inside Device Tab
   const [isCreateDeviceOpen, setIsCreateDeviceOpen] = useState(false);
   const [isImportFromApplyOpen, setIsImportFromApplyOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<any>(null);
+  const [viewingDevice, setViewingDevice] = useState<any>(null);
 
   // New/Edit Device form states
   const [deviceForm, setDeviceForm] = useState({
+    id: '',
     name: '',
-    type: '储能柜',
+    type: 'PCS',
     sn: '',
-    thingModelId: 'TM04'
+    model: 'PCS',
+    parent: '',
+    station: '',
+    enterprise: '',
+    thingModelId: 'TM05'
   });
+
+  // Station and Enterprise options for dropdown
+  const stationOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (station?.name) set.add(station.name);
+    set.add('荣成市妇幼保健院');
+    set.add('宣城华纳新材料-2#站');
+    stations.forEach(s => s.name && set.add(s.name));
+    return Array.from(set);
+  }, [stations, station?.name]);
+
+  const enterpriseOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (station?.enterpriseName) set.add(station.enterpriseName);
+    set.add('威海市荣成市妇幼保健院');
+    set.add('安徽省宣城市华纳新材料科技');
+    stations.forEach(s => s.enterpriseName && set.add(s.enterpriseName));
+    return Array.from(set);
+  }, [stations, station?.enterpriseName]);
+
+  // Combined device dataset (Mock screenshot items + user added items)
+  const allAvailableDevices = useMemo(() => {
+    const customList = devices.map(d => ({
+      id: d.id || `TH${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      name: d.name,
+      type: d.type,
+      sn: d.sn || `SN-${d.id}`,
+      model: d.model || '标准款',
+      parent: d.parent || station.name,
+      station: d.station || station.name,
+      enterprise: d.enterprise || station.enterpriseName || '天合能源有限公司',
+      createdAt: d.createdAt || '2026-08-18 16:30:00'
+    }));
+
+    const map = new Map<string, any>();
+    DEFAULT_SCREENSHOT_DEVICES.forEach(item => map.set(item.id, item));
+    customList.forEach(item => map.set(item.id, item));
+    return Array.from(map.values());
+  }, [devices, station.name, station.enterpriseName]);
+
+  // Filtered devices list
+  const filteredDeviceList = useMemo(() => {
+    return allAvailableDevices.filter(d => {
+      if (appliedFilters.deviceId && !d.id.toLowerCase().includes(appliedFilters.deviceId.toLowerCase())) return false;
+      if (appliedFilters.deviceName && !d.name.toLowerCase().includes(appliedFilters.deviceName.toLowerCase())) return false;
+      if (appliedFilters.deviceType && d.type !== appliedFilters.deviceType) return false;
+      if (appliedFilters.deviceSn && !d.sn.toLowerCase().includes(appliedFilters.deviceSn.toLowerCase())) return false;
+      if (appliedFilters.deviceModel && !(d.model || '').toLowerCase().includes(appliedFilters.deviceModel.toLowerCase())) return false;
+      if (appliedFilters.station && !d.station.includes(appliedFilters.station)) return false;
+      if (appliedFilters.enterprise && !d.enterprise.includes(appliedFilters.enterprise)) return false;
+      return true;
+    });
+  }, [allAvailableDevices, appliedFilters]);
+
+  // Filtered flag
+  const isFiltered = Boolean(
+    appliedFilters.deviceId || appliedFilters.deviceName || appliedFilters.deviceType ||
+    appliedFilters.deviceSn || appliedFilters.deviceModel || appliedFilters.station || appliedFilters.enterprise
+  );
+  const displayTotalCount = isFiltered ? filteredDeviceList.length : 2548;
+  const totalPages = Math.max(1, Math.ceil(displayTotalCount / pageSize));
+
+  // Current page items
+  const pagedDevices = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    if (start >= filteredDeviceList.length) {
+      return filteredDeviceList.slice(0, pageSize);
+    }
+    return filteredDeviceList.slice(start, start + pageSize);
+  }, [filteredDeviceList, currentPage, pageSize]);
 
   useEffect(() => {
     // Auto match thing model based on type selected
@@ -991,41 +1222,91 @@ export function StationWorkspace({
       '光伏逆变器': 'TM07',
       '电表': 'TM08'
     };
-    setDeviceForm(prev => ({ ...prev, thingModelId: modelMap[prev.type] || 'TM04' }));
+    setDeviceForm(prev => ({ ...prev, thingModelId: modelMap[prev.type] || 'TM05' }));
   }, [deviceForm.type]);
 
-  const handleCreateDevice = (e: React.FormEvent) => {
+  const handleOpenCreateDevice = () => {
+    setEditingDevice(null);
+    setDeviceForm({
+      id: `TH${Math.random().toString(36).substring(2, 12).toUpperCase()}`,
+      name: '',
+      type: 'PCS',
+      sn: `SN-${Math.random().toString(36).substring(2, 12).toUpperCase()}`,
+      model: 'PCS',
+      parent: station.name,
+      station: station.name,
+      enterprise: station.enterpriseName || '天合能源有限公司',
+      thingModelId: 'TM05'
+    });
+    setIsCreateDeviceOpen(true);
+  };
+
+  const handleOpenEditDevice = (item: any) => {
+    setEditingDevice(item);
+    setDeviceForm({
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      sn: item.sn,
+      model: item.model || '',
+      parent: item.parent || '',
+      station: item.station || station.name,
+      enterprise: item.enterprise || station.enterpriseName || '',
+      thingModelId: 'TM05'
+    });
+    setIsCreateDeviceOpen(true);
+  };
+
+  const handleSaveDevice = (e: React.FormEvent) => {
     e.preventDefault();
     const model = MOCK_THING_MODELS.find(m => m.id === deviceForm.thingModelId);
     
-    const newDevice = {
-      id: 'TH' + Math.random().toString(36).substring(2, 10).toUpperCase(),
-      name: deviceForm.name || `${deviceForm.type}设备`,
-      type: deviceForm.type,
-      sn: deviceForm.sn || `SN-${Math.random().toString(36).substring(2, 15).toUpperCase()}`,
-      model: model?.name || 'GENERIC',
-      parent: station.name,
-      station: station.name,
-      enterprise: station.enterpriseName,
-      status: 'online',
-      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
-      remarks: '手动创建并分配物模型'
-    };
+    if (editingDevice) {
+      // Update existing device
+      const updated = {
+        ...editingDevice,
+        name: deviceForm.name || editingDevice.name,
+        type: deviceForm.type,
+        sn: deviceForm.sn || editingDevice.sn,
+        model: deviceForm.model || model?.name || editingDevice.model,
+        parent: deviceForm.parent || editingDevice.parent,
+        station: deviceForm.station || editingDevice.station,
+        enterprise: deviceForm.enterprise || editingDevice.enterprise
+      };
 
-    setDevices(prev => [newDevice, ...prev]);
-    
-    // Save to localStorage
-    const saved = localStorage.getItem('wizard_created_devices');
-    let devicesList = [];
-    if (saved) {
-      try { devicesList = JSON.parse(saved); } catch (e) {}
+      setDevices(prev => prev.map(d => d.id === editingDevice.id ? updated : d));
+      showNotification('设备信息更新成功！');
+    } else {
+      // Create new device
+      const newDevice = {
+        id: deviceForm.id || `TH${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+        name: deviceForm.name || `${deviceForm.type}设备`,
+        type: deviceForm.type,
+        sn: deviceForm.sn || `SN-${Math.random().toString(36).substring(2, 15).toUpperCase()}`,
+        model: deviceForm.model || model?.name || 'GENERIC',
+        parent: deviceForm.parent || station.name,
+        station: deviceForm.station || station.name,
+        enterprise: deviceForm.enterprise || station.enterpriseName || '天合能源有限公司',
+        status: 'online',
+        createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        remarks: '手动创建并分配物模型'
+      };
+
+      setDevices(prev => [newDevice, ...prev]);
+      
+      const saved = localStorage.getItem('wizard_created_devices');
+      let devicesList = [];
+      if (saved) {
+        try { devicesList = JSON.parse(saved); } catch (e) {}
+      }
+      devicesList.push(newDevice);
+      localStorage.setItem('wizard_created_devices', JSON.stringify(devicesList));
+
+      showNotification('成功创建新设备！');
     }
-    devicesList.push(newDevice);
-    localStorage.setItem('wizard_created_devices', JSON.stringify(devicesList));
 
     setIsCreateDeviceOpen(false);
-    setDeviceForm({ name: '', type: '储能柜', sn: '', thingModelId: 'TM04' });
-    showNotification('成功添加物理设备并绑定物模型！');
+    setEditingDevice(null);
   };
 
   // Import from application checkbox states
@@ -1058,7 +1339,7 @@ export function StationWorkspace({
             model: modelMap[dev.type] || '通用物模型',
             parent: station.name,
             station: station.name,
-            enterprise: station.enterpriseName,
+            enterprise: station.enterpriseName || '天合能源有限公司',
             status: 'online',
             createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
             remarks: `通过网关申请项目[${app.station}]快速导入创建`
@@ -1084,7 +1365,7 @@ export function StationWorkspace({
   };
 
   const handleDeleteDevice = (id: string, name: string) => {
-    if (confirm(`确定要从本站移除设备 "${name}" 吗？`)) {
+    if (confirm(`确定要从系统中删除设备 "${name}" 吗？`)) {
       setDevices(prev => prev.filter(d => d.id !== id));
       
       const saved = localStorage.getItem('wizard_created_devices');
@@ -1095,7 +1376,7 @@ export function StationWorkspace({
           localStorage.setItem('wizard_created_devices', JSON.stringify(filtered));
         } catch (e) {}
       }
-      showNotification('设备已成功移除');
+      showNotification('设备已成功删除');
     }
   };
 
@@ -1507,146 +1788,306 @@ export function StationWorkspace({
         {activeTab === 'device' && (
           <div className="space-y-4">
             
-            {/* Filter controls bar */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 max-w-4xl">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2 text-gray-400" size={14} />
+            {/* Top 2-Row Filter Grid Matching Screenshot */}
+            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-xs space-y-4">
+              {/* Row 1 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-700 whitespace-nowrap w-16 text-right shrink-0">设备ID</span>
                   <input 
                     type="text" 
-                    placeholder="搜索设备名称/SN..."
-                    value={deviceSearch}
-                    onChange={e => setDeviceSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                    placeholder="请输入"
+                    value={filterDeviceId}
+                    onChange={e => setFilterDeviceId(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearchClick()}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded text-xs outline-none focus:border-blue-500 bg-white placeholder:text-gray-400"
                   />
                 </div>
-                <div>
-                  <select 
-                    value={deviceTypeFilter} 
-                    onChange={e => setDeviceTypeFilter(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-blue-500"
-                  >
-                    <option value="">全部设备类型</option>
-                    <option value="变压器">变压器</option>
-                    <option value="储能柜">储能柜</option>
-                    <option value="PCS">PCS</option>
-                    <option value="电池簇">电池簇</option>
-                    <option value="并网柜">并网柜</option>
-                    <option value="光伏逆变器">光伏逆变器</option>
-                    <option value="电表">电表</option>
-                  </select>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-700 whitespace-nowrap w-16 text-right shrink-0">设备名称</span>
+                  <input 
+                    type="text" 
+                    placeholder="请输入"
+                    value={filterDeviceName}
+                    onChange={e => setFilterDeviceName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearchClick()}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded text-xs outline-none focus:border-blue-500 bg-white placeholder:text-gray-400"
+                  />
                 </div>
-                <div>
-                  <select 
-                    value={deviceStatusFilter} 
-                    onChange={e => setDeviceStatusFilter(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-blue-500"
-                  >
-                    <option value="">全部状态</option>
-                    <option value="online">正常在线</option>
-                    <option value="alarm">发生告警</option>
-                    <option value="offline">设备离线</option>
-                  </select>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-700 whitespace-nowrap w-16 text-right shrink-0">设备类型</span>
+                  <div className="relative w-full">
+                    <select 
+                      value={filterDeviceType}
+                      onChange={e => setFilterDeviceType(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-xs outline-none focus:border-blue-500 bg-white text-gray-700 appearance-none pr-8 cursor-pointer"
+                    >
+                      <option value="">请输入</option>
+                      <option value="EMS">EMS</option>
+                      <option value="PCS">PCS</option>
+                      <option value="储能空调">储能空调</option>
+                      <option value="变压器">变压器</option>
+                      <option value="储能柜">储能柜</option>
+                      <option value="电池簇">电池簇</option>
+                      <option value="并网柜">并网柜</option>
+                      <option value="光伏逆变器">光伏逆变器</option>
+                      <option value="电表">电表</option>
+                      <option value="储能消防">储能消防</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-700 whitespace-nowrap w-16 text-right shrink-0">设备SN</span>
+                  <input 
+                    type="text" 
+                    placeholder="请输入"
+                    value={filterDeviceSn}
+                    onChange={e => setFilterDeviceSn(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearchClick()}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded text-xs outline-none focus:border-blue-500 bg-white placeholder:text-gray-400"
+                  />
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2 self-end lg:self-auto shrink-0">
-                <button 
-                  onClick={() => setIsImportFromApplyOpen(true)}
-                  className="px-3 py-1.5 border border-blue-200 hover:bg-blue-50 text-blue-600 font-bold rounded-lg text-xs transition flex items-center space-x-1 bg-white"
-                >
-                  <Plus size={13} />
-                  <span>从建站申请选择</span>
-                </button>
-                <button 
-                  onClick={() => setIsCreateDeviceOpen(true)}
-                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs shadow-sm transition flex items-center space-x-1"
-                >
-                  <Plus size={13} />
-                  <span>直接创建设备</span>
-                </button>
+              {/* Row 2 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-700 whitespace-nowrap w-16 text-right shrink-0">设备型号</span>
+                  <input 
+                    type="text" 
+                    placeholder="请输入"
+                    value={filterDeviceModel}
+                    onChange={e => setFilterDeviceModel(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearchClick()}
+                    className="w-full px-3 py-1.5 border border-gray-200 rounded text-xs outline-none focus:border-blue-500 bg-white placeholder:text-gray-400"
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-700 whitespace-nowrap w-16 text-right shrink-0">所属站点</span>
+                  <div className="relative w-full">
+                    <select 
+                      value={filterStation}
+                      onChange={e => setFilterStation(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-xs outline-none focus:border-blue-500 bg-white text-gray-700 appearance-none pr-8 cursor-pointer"
+                    >
+                      <option value="">请输入</option>
+                      {stationOptions.map(st => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs text-gray-700 whitespace-nowrap w-16 text-right shrink-0">所属企业</span>
+                  <div className="relative w-full">
+                    <select 
+                      value={filterEnterprise}
+                      onChange={e => setFilterEnterprise(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-gray-200 rounded text-xs outline-none focus:border-blue-500 bg-white text-gray-700 appearance-none pr-8 cursor-pointer"
+                    >
+                      <option value="">请选择</option>
+                      {enterpriseOptions.map(ent => (
+                        <option key={ent} value={ent}>{ent}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div className="flex items-center justify-end space-x-2.5">
+                  <button 
+                    onClick={handleSearchClick}
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition flex items-center space-x-1 shadow-xs cursor-pointer"
+                  >
+                    <Search size={13} />
+                    <span>搜索</span>
+                  </button>
+                  <button 
+                    onClick={handleResetClick}
+                    className="px-4 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 bg-white rounded text-xs font-medium transition flex items-center space-x-1 cursor-pointer"
+                  >
+                    <RotateCcw size={13} />
+                    <span>重置</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Devices Table */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="overflow-auto max-h-[500px]">
-                <table className="w-full text-left border-collapse min-w-[900px]">
-                  <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 font-bold z-10 text-gray-600">
-                    <tr>
-                      <th className="px-5 py-3 text-xs">设备名称</th>
-                      <th className="px-5 py-3 text-xs">设备类型</th>
-                      <th className="px-5 py-3 text-xs">物联/通信SN</th>
-                      <th className="px-5 py-3 text-xs">关联物模型</th>
-                      <th className="px-5 py-3 text-xs">关联站点 (默认)</th>
-                      <th className="px-5 py-3 text-xs">状态</th>
-                      <th className="px-5 py-3 text-xs text-center">操作</th>
+            {/* Action Bar Above Table */}
+            <div className="flex items-center justify-end space-x-3 pt-1">
+              <button 
+                onClick={() => setIsImportFromApplyOpen(true)}
+                className="relative px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
+              >
+                <FileText size={13} />
+                <span>本地新建设备申请</span>
+                <span className="absolute -top-1.5 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full border-2 border-white leading-tight shadow-xs">
+                  26
+                </span>
+              </button>
+              <button 
+                onClick={handleOpenCreateDevice}
+                className="px-3.5 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 bg-white text-xs font-medium rounded transition flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Plus size={13} />
+                <span>新建设备</span>
+              </button>
+            </div>
+
+            {/* Devices Table (10 Columns matching screenshot) */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-50/90 border-b border-gray-200 text-gray-700 font-medium">
+                      <th className="px-4 py-3.5 whitespace-nowrap">设备ID</th>
+                      <th className="px-4 py-3.5 whitespace-nowrap">设备名称</th>
+                      <th className="px-4 py-3.5 whitespace-nowrap">设备类型</th>
+                      <th className="px-4 py-3.5 whitespace-nowrap">设备SN</th>
+                      <th className="px-4 py-3.5 whitespace-nowrap">设备型号</th>
+                      <th className="px-4 py-3.5 whitespace-nowrap">设备父级</th>
+                      <th className="px-4 py-3.5 whitespace-nowrap">所属站点</th>
+                      <th className="px-4 py-3.5 whitespace-nowrap">所属企业</th>
+                      <th className="px-4 py-3.5 whitespace-nowrap">创建时间</th>
+                      <th className="px-4 py-3.5 text-center whitespace-nowrap">操作</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
-                    {filteredDevices.length === 0 ? (
+                  <tbody className="divide-y divide-gray-100 text-gray-700">
+                    {pagedDevices.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-12 text-gray-400">
+                        <td colSpan={10} className="text-center py-16 text-gray-400">
                           <Server size={32} className="mx-auto mb-2 text-gray-300 opacity-60" />
-                          <span>暂无符合过滤条件的站点设备</span>
+                          <span>暂无符合条件的设备数据</span>
                         </td>
                       </tr>
                     ) : (
-                      filteredDevices.map(d => {
-                        const status = d.status || (d.id.charCodeAt(0) % 3 === 0 ? 'alarm' : d.id.charCodeAt(0) % 5 === 0 ? 'offline' : 'online');
-                        return (
-                          <tr key={d.id} className="hover:bg-gray-50/50 transition">
-                            <td className="px-5 py-3 font-semibold text-gray-900">{d.name}</td>
-                            <td className="px-5 py-3">
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-[10px] font-bold">{d.type}</span>
-                            </td>
-                            <td className="px-5 py-3 font-mono text-gray-500">{d.sn}</td>
-                            <td className="px-5 py-3 font-medium text-gray-600">{d.model || '通用物模型'}</td>
-                            <td className="px-5 py-3 text-gray-400 font-semibold">{station.name}</td>
-                            <td className="px-5 py-3">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                                status === 'online' ? 'bg-green-50 text-green-700 border border-green-200' :
-                                status === 'alarm' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                'bg-gray-100 text-gray-600 border border-gray-200'
-                              }`}>
-                                <span className={`w-1 h-1 rounded-full mr-1.5 ${
-                                  status === 'online' ? 'bg-green-500' :
-                                  status === 'alarm' ? 'bg-amber-500' :
-                                  'bg-gray-400'
-                                }`} />
-                                {status === 'online' ? '在线' : status === 'alarm' ? '告警' : '离线'}
-                              </span>
-                            </td>
-                            <td className="px-5 py-3">
-                              <div className="flex justify-center space-x-1.5">
-                                <button 
-                                  onClick={() => {
-                                    setEditingDevice(d);
-                                    setDeviceForm({ name: d.name, type: d.type, sn: d.sn, thingModelId: 'TM04' });
-                                    setIsCreateDeviceOpen(true);
-                                  }}
-                                  className="px-2 py-0.5 text-blue-600 border border-blue-200 hover:bg-blue-50 rounded text-[10px] font-bold"
-                                >
-                                  编辑
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteDevice(d.id, d.name)}
-                                  className="px-2 py-0.5 text-red-600 border border-red-200 hover:bg-red-50 rounded text-[10px] font-bold"
-                                >
-                                  移除
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
+                      pagedDevices.map(item => (
+                        <tr key={item.id} className="hover:bg-blue-50/20 transition-colors">
+                          <td className="px-4 py-3 font-mono text-gray-800 whitespace-nowrap">{item.id}</td>
+                          <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{item.name}</td>
+                          <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{item.type}</td>
+                          <td className="px-4 py-3 font-mono text-gray-600 whitespace-nowrap">{item.sn}</td>
+                          <td className="px-4 py-3 font-mono text-gray-600 whitespace-nowrap">{item.model || '-'}</td>
+                          <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{item.parent || '-'}</td>
+                          <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{item.station}</td>
+                          <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{item.enterprise}</td>
+                          <td className="px-4 py-3 font-mono text-gray-500 whitespace-nowrap">{item.createdAt}</td>
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center space-x-1.5">
+                              <button 
+                                onClick={() => setViewingDevice(item)}
+                                className="px-2 py-0.5 border border-blue-500 text-blue-600 hover:bg-blue-50 bg-white rounded text-[11px] font-medium transition cursor-pointer"
+                              >
+                                详情
+                              </button>
+                              <button 
+                                onClick={() => handleOpenEditDevice(item)}
+                                className="px-2 py-0.5 border border-blue-500 text-blue-600 hover:bg-blue-50 bg-white rounded text-[11px] font-medium transition cursor-pointer"
+                              >
+                                编辑
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteDevice(item.id, item.name)}
+                                className="px-2 py-0.5 border border-red-400 text-red-500 hover:bg-red-50 bg-white rounded text-[11px] font-medium transition cursor-pointer"
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
               </div>
-              <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between text-gray-400 text-[10px] font-bold tracking-wider">
-                <span>过滤结果: {filteredDevices.length} 台</span>
-                <span>当前站点设备总计: {stationDevices.length} 台</span>
+
+              {/* Pagination Footer */}
+              <div className="px-5 py-3 border-t border-gray-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-gray-600">
+                <div>
+                  共 <span className="font-mono">{displayTotalCount}</span> 条记录 第<span className="font-mono">{currentPage}/{totalPages}</span>页
+                </div>
+                <div className="flex items-center space-x-2">
+                  {/* Page Numbers */}
+                  <div className="flex items-center space-x-1">
+                    {[1, 2, 3, 4, 5].filter(p => p <= totalPages).map(p => {
+                      const isCurrent = p === currentPage;
+                      return (
+                        <button
+                          key={p}
+                          onClick={() => setCurrentPage(p)}
+                          className={`w-7 h-7 flex items-center justify-center rounded text-xs transition cursor-pointer ${
+                            isCurrent 
+                              ? 'border border-blue-600 text-blue-600 font-bold bg-white' 
+                              : 'border border-gray-200 text-gray-600 hover:bg-gray-50 bg-white'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+                    {totalPages > 5 && (
+                      <>
+                        <span className="px-1 text-gray-400">...</span>
+                        <button
+                          onClick={() => setCurrentPage(totalPages)}
+                          className={`w-7 h-7 flex items-center justify-center rounded text-xs transition cursor-pointer ${
+                            currentPage === totalPages 
+                              ? 'border border-blue-600 text-blue-600 font-bold bg-white' 
+                              : 'border border-gray-200 text-gray-600 hover:bg-gray-50 bg-white'
+                          }`}
+                        >
+                          {totalPages}
+                        </button>
+                      </>
+                    )}
+                    <button
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      className="w-7 h-7 flex items-center justify-center rounded border border-gray-200 text-gray-600 hover:bg-gray-50 bg-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+
+                  {/* Page Size */}
+                  <div className="relative">
+                    <select 
+                      value={pageSize}
+                      onChange={e => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="px-2 py-1 border border-gray-200 rounded text-xs bg-white text-gray-700 outline-none pr-6 cursor-pointer"
+                    >
+                      <option value={10}>10 条/页</option>
+                      <option value={20}>20 条/页</option>
+                      <option value={50}>50 条/页</option>
+                      <option value={100}>100 条/页</option>
+                    </select>
+                  </div>
+
+                  {/* Jump Page */}
+                  <div className="flex items-center space-x-1 text-gray-500">
+                    <span>跳至</span>
+                    <input 
+                      type="text" 
+                      value={jumpPageInput}
+                      onChange={e => setJumpPageInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const num = parseInt(jumpPageInput, 10);
+                          if (!isNaN(num) && num >= 1 && num <= totalPages) {
+                            setCurrentPage(num);
+                            setJumpPageInput('');
+                          }
+                        }
+                      }}
+                      className="w-10 h-7 text-center border border-gray-200 rounded text-xs outline-none focus:border-blue-500 bg-white font-mono"
+                    />
+                    <span>页</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -3085,13 +3526,13 @@ export function StationWorkspace({
       {isCreateDeviceOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <form 
-            onSubmit={handleCreateDevice}
-            className="bg-white border border-gray-200 rounded-xl p-6 max-w-md w-full space-y-4 shadow-xl"
+            onSubmit={handleSaveDevice}
+            className="bg-white border border-gray-200 rounded-xl p-6 max-w-lg w-full space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="font-bold text-gray-900 text-xs flex items-center space-x-1.5">
-                <Server size={14} className="text-gray-500" />
-                <span>{editingDevice ? '编辑设备明细' : '分配并创建新物理设备'}</span>
+              <h3 className="font-bold text-gray-900 text-sm flex items-center space-x-2">
+                <Server size={16} className="text-blue-600" />
+                <span>{editingDevice ? '编辑设备信息' : '新建设备'}</span>
               </h3>
               <button 
                 type="button"
@@ -3099,89 +3540,202 @@ export function StationWorkspace({
                   setIsCreateDeviceOpen(false);
                   setEditingDevice(null);
                 }}
-                className="p-1 hover:bg-gray-100 rounded text-gray-400"
+                className="p-1 hover:bg-gray-100 rounded text-gray-400 cursor-pointer"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[11px] font-bold text-gray-500 mb-1">设备类型</label>
-                <select 
-                  value={deviceForm.type}
-                  onChange={e => setDeviceForm(prev => ({ ...prev, type: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-blue-500 font-semibold"
-                >
-                  <option value="变压器">变压器</option>
-                  <option value="储能柜">储能柜</option>
-                  <option value="PCS">PCS</option>
-                  <option value="电池簇">电池簇</option>
-                  <option value="并网柜">并网柜</option>
-                  <option value="光伏逆变器">光伏逆变器</option>
-                  <option value="电表">电表</option>
-                </select>
+            <div className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">设备ID</label>
+                  <input 
+                    type="text" 
+                    placeholder="系统自动分配ID"
+                    value={deviceForm.id}
+                    onChange={e => setDeviceForm(prev => ({ ...prev, id: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 font-mono bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">设备类型 <span className="text-red-500">*</span></label>
+                  <select 
+                    value={deviceForm.type}
+                    onChange={e => setDeviceForm(prev => ({ ...prev, type: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-blue-500 font-medium"
+                  >
+                    <option value="EMS">EMS</option>
+                    <option value="PCS">PCS</option>
+                    <option value="储能空调">储能空调</option>
+                    <option value="变压器">变压器</option>
+                    <option value="储能柜">储能柜</option>
+                    <option value="电池簇">电池簇</option>
+                    <option value="并网柜">并网柜</option>
+                    <option value="光伏逆变器">光伏逆变器</option>
+                    <option value="电表">电表</option>
+                    <option value="储能消防">储能消防</option>
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-gray-500 mb-1">设备名称 (不填则自动根据类型生成)</label>
-                <input 
-                  type="text" 
-                  placeholder={`例如: 1#${deviceForm.type}`}
-                  value={deviceForm.name}
-                  onChange={e => setDeviceForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 font-semibold bg-white"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">设备名称 <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text" 
+                    placeholder={`例如: 1#${deviceForm.type}`}
+                    value={deviceForm.name}
+                    onChange={e => setDeviceForm(prev => ({ ...prev, name: e.target.value }))}
+                    required
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 font-medium bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">设备SN <span className="text-red-500">*</span></label>
+                  <input 
+                    type="text" 
+                    placeholder="请输入设备SN串码"
+                    value={deviceForm.sn}
+                    onChange={e => setDeviceForm(prev => ({ ...prev, sn: e.target.value }))}
+                    required
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 font-mono font-medium bg-white"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-gray-500 mb-1">物理通信SN (或物联串码)</label>
-                <input 
-                  type="text" 
-                  placeholder="请输入SN"
-                  value={deviceForm.sn}
-                  onChange={e => setDeviceForm(prev => ({ ...prev, sn: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 font-mono font-semibold bg-white"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">设备型号</label>
+                  <input 
+                    type="text" 
+                    placeholder="例如: PCS-100KW-V2"
+                    value={deviceForm.model}
+                    onChange={e => setDeviceForm(prev => ({ ...prev, model: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 font-medium bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">设备父级</label>
+                  <input 
+                    type="text" 
+                    placeholder="例如: 1#变压器 或 留空"
+                    value={deviceForm.parent}
+                    onChange={e => setDeviceForm(prev => ({ ...prev, parent: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 font-medium bg-white"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-gray-500 mb-1">适配绑定物模型</label>
-                <select 
-                  value={deviceForm.thingModelId}
-                  onChange={e => setDeviceForm(prev => ({ ...prev, thingModelId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white outline-none focus:border-blue-500 font-medium"
-                >
-                  {MOCK_THING_MODELS.filter(m => m.deviceType === deviceForm.type).map(m => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">所属站点</label>
+                  <input 
+                    type="text" 
+                    value={deviceForm.station}
+                    onChange={e => setDeviceForm(prev => ({ ...prev, station: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 font-medium bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 mb-1">所属企业</label>
+                  <input 
+                    type="text" 
+                    value={deviceForm.enterprise}
+                    onChange={e => setDeviceForm(prev => ({ ...prev, enterprise: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 font-medium bg-white"
+                  />
+                </div>
               </div>
 
-              <div className="p-3 bg-gray-50 text-gray-400 rounded-lg text-[10px] leading-relaxed">
-                提示: 直接创建设备将被自动标记分配到当前工作的站点：<b>【{station.name}】</b>，处于在线就绪状态。
+              <div className="p-3 bg-blue-50 text-blue-700 rounded-lg text-[11px] leading-relaxed">
+                提示: 设备创建或编辑完成后，将自动同步更新到站点列表及逻辑设备模型库中。
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-gray-100">
+            <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-gray-100">
               <button 
                 type="button"
                 onClick={() => {
                   setIsCreateDeviceOpen(false);
                   setEditingDevice(null);
                 }}
-                className="px-3 py-2 border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg transition"
+                className="px-4 py-2 border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-medium rounded-lg transition cursor-pointer"
               >
                 取消
               </button>
               <button 
                 type="submit"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shadow-xs transition cursor-pointer"
               >
-                {editingDevice ? '保存修改' : '确认分配创建'}
+                {editingDevice ? '保存修改' : '确认新建'}
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ==================== VIEW DEVICE DETAILS MODAL ================= */}
+      {viewingDevice && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-lg w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="font-bold text-gray-900 text-sm flex items-center space-x-2">
+                <FileText size={16} className="text-blue-600" />
+                <span>设备详情 - {viewingDevice.name}</span>
+              </h3>
+              <button 
+                onClick={() => setViewingDevice(null)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-400 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="bg-gray-50 p-3 rounded-lg space-y-1">
+                <span className="text-gray-400 text-[10px]">设备ID</span>
+                <p className="font-mono font-bold text-gray-800 break-all">{viewingDevice.id}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg space-y-1">
+                <span className="text-gray-400 text-[10px]">设备类型</span>
+                <p className="font-bold text-gray-800">{viewingDevice.type}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg space-y-1">
+                <span className="text-gray-400 text-[10px]">设备SN</span>
+                <p className="font-mono font-bold text-gray-800 break-all">{viewingDevice.sn}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg space-y-1">
+                <span className="text-gray-400 text-[10px]">设备型号</span>
+                <p className="font-mono text-gray-800">{viewingDevice.model || '-'}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg space-y-1">
+                <span className="text-gray-400 text-[10px]">设备父级</span>
+                <p className="text-gray-800">{viewingDevice.parent || '-'}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg space-y-1">
+                <span className="text-gray-400 text-[10px]">所属站点</span>
+                <p className="text-gray-800">{viewingDevice.station}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg space-y-1 col-span-2">
+                <span className="text-gray-400 text-[10px]">所属企业</span>
+                <p className="text-gray-800 font-medium">{viewingDevice.enterprise}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg space-y-1 col-span-2">
+                <span className="text-gray-400 text-[10px]">创建时间</span>
+                <p className="font-mono text-gray-600">{viewingDevice.createdAt || '2026-08-18 16:30:00'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-gray-100">
+              <button 
+                onClick={() => setViewingDevice(null)}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition cursor-pointer"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
