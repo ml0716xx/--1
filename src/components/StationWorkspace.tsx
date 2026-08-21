@@ -6,12 +6,14 @@ import {
   Clock, Server, Network, Zap, RefreshCw, Link, Unlink, CheckSquare, Square,
   CheckCircle2, Power, ChevronDown, BatteryCharging, Plug, Gauge, SunMedium, 
   Wind, Flame, Box, Sun, CornerDownRight, Move, ZoomIn, ZoomOut, Maximize2, RotateCcw,
-  ChevronLeft, ChevronRight, LayoutGrid
+  ChevronLeft, ChevronRight, LayoutGrid, Send, Radio, FileCode, ShieldCheck,
+  History, Eye, Play, Sparkles
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { INITIAL_VERSIONS, INITIAL_FEATURE_PACKS, PROVINCES, SALES_PRICES } from '../App';
+import { TopologyDispatchModal, DispatchHistoryItem } from './TopologyDispatchModal';
 
 // Topology device types config map
 const DEVICE_TYPE_CONFIG: Record<string, { icon: any, color: string, border: string, bg: string, badge: string }> = {
@@ -376,8 +378,88 @@ export function StationWorkspace({
     localStorage.setItem(key, JSON.stringify(pendingDevices));
   }, [pendingDevices, station.id, station.name]);
 
-  // Layout mode state: Vertical tree vs Horizontal tree
-  const [treeLayoutMode, setTreeLayoutMode] = useState<'vertical' | 'horizontal'>('vertical');
+  // Layout mode state: Vertical tree vs Horizontal tree vs Single-line diagram vs Matrix grid
+  const [treeLayoutMode, setTreeLayoutMode] = useState<'vertical' | 'horizontal' | 'singleline' | 'matrix'>('vertical');
+
+  // Currently live operational topology in site field (现场当前生效拓扑)
+  const [operationalTopoId, setOperationalTopoId] = useState<string>(() => {
+    const key = `station_operational_topo_${station.id || station.name}`;
+    return localStorage.getItem(key) || 'T01';
+  });
+
+  useEffect(() => {
+    const key = `station_operational_topo_${station.id || station.name}`;
+    localStorage.setItem(key, operationalTopoId);
+  }, [operationalTopoId, station.id, station.name]);
+
+  // Topology Deployment / Dispatch Status per Topology
+  const [topoDeploymentStatus, setTopoDeploymentStatus] = useState<Record<string, { status: 'deployed' | 'modified' | 'draft', lastDeployedAt?: string, version?: string }>>(() => {
+    const key = `station_topo_deploy_status_${station.id || station.name}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      'T01': { status: 'deployed', lastDeployedAt: '2026-08-18 17:30:15', version: 'v2.4.0' },
+      'T02': { status: 'deployed', lastDeployedAt: '2026-07-28 10:15:00', version: 'v2.3.8' },
+      'T03': { status: 'modified', lastDeployedAt: '2026-07-15 09:00:00', version: 'v2.2.1' },
+      'T04': { status: 'draft', version: 'v1.0.0-draft' }
+    };
+  });
+
+  useEffect(() => {
+    const key = `station_topo_deploy_status_${station.id || station.name}`;
+    localStorage.setItem(key, JSON.stringify(topoDeploymentStatus));
+  }, [topoDeploymentStatus, station.id, station.name]);
+
+  // Dispatch Modal Open State
+  const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
+
+  // Switch Active Operational Topology Handler
+  const handleSwitchOperationalTopo = (topoId: string) => {
+    const targetTopo = stationTopologies.find(t => t.id === topoId);
+    if (!targetTopo) return;
+
+    setOperationalTopoId(topoId);
+    setActiveTopoId(topoId);
+
+    // Also update bound incomer status if needed
+    showNotification(`已成功将 [${targetTopo.name}] 切换为现场当前运行主拓扑！`, 'success');
+  };
+
+  // Dispatch Success Handler
+  const handleDispatchSuccess = (topoId: string, version: string, mode: string) => {
+    const targetTopo = stationTopologies.find(t => t.id === topoId);
+    const timeNow = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    setTopoDeploymentStatus(prev => ({
+      ...prev,
+      [topoId]: {
+        status: 'deployed',
+        lastDeployedAt: timeNow,
+        version: version
+      }
+    }));
+
+    // If active topo was dispatched, set it as operational
+    setOperationalTopoId(topoId);
+
+    showNotification(`拓扑方案 [${targetTopo?.name || topoId}] 已成功下发至网关并生效！(版本: ${version})`, 'success');
+  };
+
+  // Rollback Topology Handler
+  const handleRollbackTopo = (historyItem: DispatchHistoryItem) => {
+    setTopoDeploymentStatus(prev => ({
+      ...prev,
+      [historyItem.topoId]: {
+        status: 'deployed',
+        lastDeployedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        version: historyItem.version
+      }
+    }));
+    setActiveTopoId(historyItem.topoId);
+    showNotification(`已成功回滚拓扑至历史版本 [${historyItem.version}]！`, 'success');
+  };
   
   // Canvas Zoom Scale state (50% ~ 200%)
   const [canvasScale, setCanvasScale] = useState<number>(1);
@@ -2442,60 +2524,137 @@ export function StationWorkspace({
           <div className="space-y-4">
             
             {/* Top Toolbar */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-gray-900 text-xs flex items-center space-x-1.5">
-                  <Network size={14} className="text-blue-600" />
-                  <span>站点拓扑维护 ({stationTopologies.length} 套拓扑方案)</span>
-                </h3>
-                <p className="text-[10px] text-gray-500 mt-0.5">支持横向/纵向树布局展示，可通过拖拽待编辑设备至画布节点实现自动吸附与连线</p>
+                <div className="flex items-center space-x-2">
+                  <h3 className="font-bold text-gray-900 text-xs flex items-center space-x-1.5">
+                    <Network size={14} className="text-blue-600" />
+                    <span>站点拓扑管理与组态下发</span>
+                  </h3>
+                  <span className="text-[10px] bg-slate-100 text-slate-700 font-mono px-2 py-0.5 rounded-full font-bold">
+                    共 {stationTopologies.length} 套拓扑方案
+                  </span>
+                  {(() => {
+                    const currentActiveTopo = stationTopologies.find(t => t.id === (activeTopoId || stationTopologies[0]?.id)) || stationTopologies[0];
+                    const isOperational = currentActiveTopo?.id === operationalTopoId;
+                    const depStatus = topoDeploymentStatus[currentActiveTopo?.id]?.status || 'draft';
+                    const version = topoDeploymentStatus[currentActiveTopo?.id]?.version || 'v2.4.0';
+
+                    return (
+                      <div className="flex items-center space-x-1.5 ml-2">
+                        {isOperational ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded-full flex items-center space-x-1 shadow-2xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                            <span>现场当前运行中 ({version})</span>
+                          </span>
+                        ) : depStatus === 'modified' ? (
+                          <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 font-bold px-2 py-0.5 rounded-full flex items-center space-x-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <span>有改动待下发</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-gray-100 text-gray-600 font-medium px-2 py-0.5 rounded-full">
+                            备用方案
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">支持纵向树/横向树/单线电气图多视角切换；完成拓扑节点与电表配置后，可一键下发至边缘网关生效</p>
               </div>
 
-              <div className="flex items-center space-x-2 shrink-0">
+              <div className="flex items-center flex-wrap gap-2 shrink-0">
+                {/* Switch Operational Topology Button */}
+                {(() => {
+                  const currentActiveTopo = stationTopologies.find(t => t.id === (activeTopoId || stationTopologies[0]?.id)) || stationTopologies[0];
+                  const isOperational = currentActiveTopo?.id === operationalTopoId;
+                  if (!isOperational && currentActiveTopo) {
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleSwitchOperationalTopo(currentActiveTopo.id)}
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-lg shadow-2xs transition flex items-center space-x-1.5"
+                        title="将当前选中的拓扑方案切换为现场实际运行的拓扑结构"
+                      >
+                        <CheckCircle2 size={13} className="text-emerald-600" />
+                        <span>设为现场运行主拓扑</span>
+                      </button>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Dispatch Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsDispatchModalOpen(true)}
+                  className="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg shadow-md transition flex items-center space-x-1.5 animate-in fade-in"
+                  title="将当前拓扑配置编译生成报文并下发至天合边缘EMS网关"
+                >
+                  <Send size={13} />
+                  <span>下发拓扑至网关</span>
+                  {topoDeploymentStatus[activeTopoId || 'T01']?.status === 'modified' && (
+                    <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping ml-0.5" />
+                  )}
+                </button>
+
                 <button
                   onClick={handleOpenAddTopo}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1"
+                  className="px-3 py-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-bold text-xs rounded-lg shadow-2xs transition flex items-center space-x-1"
                 >
                   <Plus size={13} />
-                  <span>新增拓扑图</span>
+                  <span>新增拓扑</span>
                 </button>
+
                 {isTopologyEditMode ? (
                   <button 
                     onClick={() => {
                       setIsTopologyEditMode(false);
                       setDragOverNodeId(null);
-                      showNotification('拓扑修改完成，连线关系已保存并发布！');
+                      // Mark as modified if edited
+                      setTopoDeploymentStatus(prev => ({
+                        ...prev,
+                        [activeTopoId || 'T01']: {
+                          ...(prev[activeTopoId || 'T01'] || {}),
+                          status: 'modified'
+                        }
+                      }));
+                      showNotification('拓扑修改完成，连线关系已本地暂存（可点击“下发拓扑”同步至边缘网关）！');
                     }}
                     className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1.5"
                   >
                     <CheckCircle2 size={13} />
-                    <span>完成并保存编辑</span>
+                    <span>完成编辑</span>
                   </button>
                 ) : (
                   <button 
                     onClick={() => {
                       setIsTopologyEditMode(true);
-                      showNotification('已进入拓扑编辑模式：可拖拽待编辑设备到节点下，也可拖回待编辑区或点击删除');
+                      showNotification('已进入拓扑编辑模式：可拖拽待编辑设备到节点下吸附组网，也可建立电表测量关联');
                     }}
                     className="px-3.5 py-1.5 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1.5"
                   >
                     <Edit2 size={13} />
-                    <span>编辑拓扑图</span>
+                    <span>编辑拓扑</span>
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Multi-topology Tab Selector */}
-            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-3">
+            {/* Multi-topology Tab & Switching Bar */}
+            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex items-center space-x-2 overflow-x-auto py-0.5 custom-scrollbar">
                 <span className="text-xs font-bold text-gray-500 shrink-0 mr-1 flex items-center space-x-1">
                   <Layers size={13} className="text-blue-600" />
-                  <span>拓扑方案列表:</span>
+                  <span>切换拓扑方案:</span>
                 </span>
                 {stationTopologies.map((topo) => {
                   const isActive = (activeTopoId || stationTopologies[0]?.id) === topo.id;
+                  const isOperational = topo.id === operationalTopoId;
                   const boundIncomer = incomerLines.find(l => l.boundTopoIds.includes(topo.id));
+                  const depStatus = topoDeploymentStatus[topo.id]?.status || 'draft';
+
                   return (
                     <button
                       key={topo.id}
@@ -2503,16 +2662,32 @@ export function StationWorkspace({
                         setActiveTopoId(topo.id);
                         setSelectedNodeId(null);
                       }}
-                      className={`px-3.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center space-x-2 shrink-0 select-none ${
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition flex items-center space-x-2 shrink-0 select-none ${
                         isActive 
                           ? 'bg-blue-600 border-blue-600 text-white shadow-sm' 
-                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300'
                       }`}
                     >
-                      <span>{topo.name}</span>
-                      {boundIncomer && (
+                      <div className="flex items-center space-x-1.5">
+                        {isOperational && (
+                          <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-300' : 'bg-emerald-500'}`} title="现场运行中" />
+                        )}
+                        <span>{topo.name}</span>
+                      </div>
+
+                      {isOperational ? (
                         <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${isActive ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                          绑定: {boundIncomer.name}
+                          运行中
+                        </span>
+                      ) : depStatus === 'modified' ? (
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${isActive ? 'bg-amber-400 text-gray-900' : 'bg-amber-100 text-amber-800'}`}>
+                          待下发
+                        </span>
+                      ) : null}
+
+                      {boundIncomer && (
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${isActive ? 'bg-blue-500/80 text-blue-100' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                          进线: {boundIncomer.name}
                         </span>
                       )}
                     </button>
@@ -2532,7 +2707,7 @@ export function StationWorkspace({
                       title="修改拓扑名称与备注说明"
                     >
                       <Edit2 size={12} />
-                      <span>修改拓扑属性</span>
+                      <span>修改属性</span>
                     </button>
                     <button
                       onClick={() => handleDeleteTopo(currentActiveTopo.id, currentActiveTopo.name)}
@@ -2767,6 +2942,7 @@ export function StationWorkspace({
                         className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center space-x-1 ${
                           treeLayoutMode === 'vertical' ? 'bg-white text-blue-600 shadow-xs' : 'text-gray-500 hover:text-gray-900'
                         }`}
+                        title="纵向树形拓扑结构"
                       >
                         <span>纵向树 ↕</span>
                       </button>
@@ -2776,8 +2952,29 @@ export function StationWorkspace({
                         className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center space-x-1 ${
                           treeLayoutMode === 'horizontal' ? 'bg-white text-blue-600 shadow-xs' : 'text-gray-500 hover:text-gray-900'
                         }`}
+                        title="横向树形拓扑结构"
                       >
                         <span>横向树 ↔</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTreeLayoutMode('singleline')}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center space-x-1 ${
+                          treeLayoutMode === 'singleline' ? 'bg-white text-blue-600 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                        title="单线电气一次接线图"
+                      >
+                        <span>单线电气图 ⚡</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTreeLayoutMode('matrix')}
+                        className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center space-x-1 ${
+                          treeLayoutMode === 'matrix' ? 'bg-white text-blue-600 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                        title="设备节点与通信矩阵"
+                      >
+                        <span>设备矩阵 ⊞</span>
                       </button>
                     </div>
                   </div>
@@ -2794,6 +2991,221 @@ export function StationWorkspace({
 
                 {/* Tree Canvas Render Area */}
                 <div ref={canvasContainerRef} className="flex-1 overflow-auto p-4 border border-dashed border-gray-200 rounded-xl bg-gray-50/40 custom-scrollbar flex items-center justify-center min-h-[460px] relative">
+                  
+                  {/* VIEW MODE 1: SINGLE-LINE ELECTRICAL DIAGRAM */}
+                  {treeLayoutMode === 'singleline' && (
+                    <div className="w-full max-w-4xl p-5 bg-slate-950 text-white rounded-2xl shadow-xl border border-slate-800 space-y-6 animate-in fade-in duration-200 my-auto">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-400/30">
+                            <Zap size={16} />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-xs text-white">单线电气主接线图 (Single-line Diagram)</h4>
+                            <p className="text-[10px] text-slate-400 font-mono">10kV 电网进线 → 315kVA 降压变压器 → 380V 低压交流母线 → 储能/光伏/桩负荷分路</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3 text-[10px] font-mono">
+                          <span className="flex items-center space-x-1 text-emerald-400 font-bold">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>母线电压: 398.2V / 50.01Hz</span>
+                          </span>
+                          <span className="text-sky-300">总有功: 82.4 kW</span>
+                        </div>
+                      </div>
+
+                      {/* Power Flow Diagram */}
+                      <div className="space-y-6 py-2">
+                        {/* 10kV Grid & High-Voltage Breaker */}
+                        <div className="flex flex-col items-center">
+                          <div className="px-5 py-2 bg-slate-900 border-2 border-amber-500 rounded-xl text-center shadow-lg">
+                            <div className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">10kV 市电电网接入点 (Utility Grid)</div>
+                            <div className="text-xs font-bold text-white mt-0.5">站点主进线断路器 [AH01]</div>
+                            <div className="text-[10px] text-emerald-400 font-mono mt-0.5">● 状态: 合闸闭合 (Closed) | 关口表: PM800-01</div>
+                          </div>
+                          <div className="w-0.5 h-6 bg-amber-500" />
+                          <div className="px-4 py-1.5 bg-blue-950 border border-blue-500 rounded-lg text-center text-xs">
+                            <div className="font-bold text-blue-300">315 kVA 变压器 (#1 Transformer)</div>
+                            <div className="text-[9px] text-slate-400 font-mono">变比: 10kV / 0.4kV | Dyn11 | 负载率: 36.8%</div>
+                          </div>
+                          <div className="w-0.5 h-6 bg-cyan-400" />
+                        </div>
+
+                        {/* 380V Main Busbar (Low Voltage) */}
+                        <div className="relative py-2">
+                          <div className="w-full h-3 bg-gradient-to-r from-cyan-600 via-sky-400 to-cyan-600 rounded-full shadow-lg flex items-center justify-center">
+                            <span className="text-[9px] font-mono font-bold text-slate-950 px-3 bg-white/90 rounded-full shadow-xs">
+                              380V 低压交流主母线 (Main AC Busbar #1)
+                            </span>
+                          </div>
+
+                          {/* 4 Downstream Feeders */}
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6 pt-4 border-t border-dashed border-slate-800">
+                            
+                            {/* Feeder 1: Energy Storage */}
+                            <div className="p-3 bg-slate-900/90 rounded-xl border border-purple-500/40 space-y-2">
+                              <div className="text-[10px] text-purple-400 font-bold flex items-center justify-between">
+                                <span>1# 储能分路 (ESS)</span>
+                                <span className="bg-purple-950 text-purple-300 px-1.5 py-0.2 rounded text-[9px] font-mono">100kW/215kWh</span>
+                              </div>
+                              <div className="text-xs font-bold text-white">储能变流器 (PCS)</div>
+                              <div className="text-[10px] text-slate-400 space-y-0.5 font-mono">
+                                <div>• 电池簇: 280Ah LFP (SOC: 78.4%)</div>
+                                <div>• 辅控: 储能空调 + 消防联动</div>
+                                <div>• 测量表: 储能专用双向计量表</div>
+                              </div>
+                              <div className="text-[10px] text-emerald-400 font-bold font-mono pt-1 border-t border-slate-800">
+                                充放功率: +45.2 kW (充电中)
+                              </div>
+                            </div>
+
+                            {/* Feeder 2: PV Solar Inverters */}
+                            <div className="p-3 bg-slate-900/90 rounded-xl border border-yellow-500/40 space-y-2">
+                              <div className="text-[10px] text-yellow-400 font-bold flex items-center justify-between">
+                                <span>2# 光伏并网分路 (PV)</span>
+                                <span className="bg-yellow-950 text-yellow-300 px-1.5 py-0.2 rounded text-[9px] font-mono">50kWp</span>
+                              </div>
+                              <div className="text-xs font-bold text-white">组串式逆变器 (Inverter)</div>
+                              <div className="text-[10px] text-slate-400 space-y-0.5 font-mono">
+                                <div>• 辐照度: 820 W/m²</div>
+                                <div>• MPPT效率: 98.6%</div>
+                                <div>• 测量表: 光伏发电计量电表</div>
+                              </div>
+                              <div className="text-[10px] text-yellow-400 font-bold font-mono pt-1 border-t border-slate-800">
+                                发电功率: 38.6 kW
+                              </div>
+                            </div>
+
+                            {/* Feeder 3: EV Charging Stations */}
+                            <div className="p-3 bg-slate-900/90 rounded-xl border border-emerald-500/40 space-y-2">
+                              <div className="text-[10px] text-emerald-400 font-bold flex items-center justify-between">
+                                <span>3# 充电桩分路 (EV)</span>
+                                <span className="bg-emerald-950 text-emerald-300 px-1.5 py-0.2 rounded text-[9px] font-mono">120kW 超充</span>
+                              </div>
+                              <div className="text-xs font-bold text-white">双枪直流快速充电桩</div>
+                              <div className="text-[10px] text-slate-400 space-y-0.5 font-mono">
+                                <div>• A枪: 充电中 (42.0 kW)</div>
+                                <div>• B枪: 空闲待机 (0.0 kW)</div>
+                                <div>• 测量表: 充电桩计费计量表</div>
+                              </div>
+                              <div className="text-[10px] text-emerald-400 font-bold font-mono pt-1 border-t border-slate-800">
+                                用电功率: 42.0 kW
+                              </div>
+                            </div>
+
+                            {/* Feeder 4: Plant Loads */}
+                            <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-700 space-y-2">
+                              <div className="text-[10px] text-slate-400 font-bold flex items-center justify-between">
+                                <span>4# 厂区动力负荷</span>
+                                <span className="bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded text-[9px] font-mono">配电负荷</span>
+                              </div>
+                              <div className="text-xs font-bold text-white">厂区车间动力总回路</div>
+                              <div className="text-[10px] text-slate-400 space-y-0.5 font-mono">
+                                <div>• 动力回路 1#~4#</div>
+                                <div>• 功率因数: 0.96</div>
+                                <div>• 测量表: 厂区总动力电表</div>
+                              </div>
+                              <div className="text-[10px] text-slate-300 font-bold font-mono pt-1 border-t border-slate-800">
+                                负荷功率: 57.0 kW
+                              </div>
+                            </div>
+
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* VIEW MODE 2: NODE MATRIX TABLE */}
+                  {treeLayoutMode === 'matrix' && (
+                    <div className="w-full max-w-5xl bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden text-xs animate-in fade-in duration-200 my-auto">
+                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                        <div>
+                          <h4 className="font-bold text-gray-900">拓扑节点与通信映射矩阵</h4>
+                          <p className="text-[10px] text-gray-400 mt-0.5">当前方案包含的逻辑拓扑节点、上级从属关系及绑定测量电表点表</p>
+                        </div>
+                        <span className="text-[10px] text-blue-600 font-mono font-bold bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                          共 {(topoTrees[activeTopoId || 'T01'] || []).length} 个节点
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                          <thead className="bg-gray-50/80 text-gray-500 text-[11px] font-bold border-b border-gray-200">
+                            <tr>
+                              <th className="px-4 py-2.5">节点名称</th>
+                              <th className="px-3 py-2.5">设备类型</th>
+                              <th className="px-3 py-2.5">挂载上级节点</th>
+                              <th className="px-3 py-2.5">设备 SN</th>
+                              <th className="px-3 py-2.5">型号规格</th>
+                              <th className="px-4 py-2.5">关联测量电表</th>
+                              <th className="px-3 py-2.5">通信状态</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 font-medium">
+                            {(topoTrees[activeTopoId || 'T01'] || DEFAULT_TOPOLOGY_NODES_MAP['T01'] || []).map((node) => {
+                              const currentNodes = topoTrees[activeTopoId || 'T01'] || DEFAULT_TOPOLOGY_NODES_MAP['T01'] || [];
+                              const parent = currentNodes.find(n => n.id === node.parentId);
+                              const cfg = DEVICE_TYPE_CONFIG[node.type] || DEVICE_TYPE_CONFIG['变压器'];
+                              const IconComp = cfg.icon;
+
+                              return (
+                                <tr key={node.id} className="hover:bg-blue-50/40 transition">
+                                  <td className="px-4 py-2.5 font-bold text-gray-900 flex items-center space-x-2">
+                                    <div className={`p-1 rounded ${cfg.bg} ${cfg.color}`}>
+                                      <IconComp size={13} />
+                                    </div>
+                                    <span>{node.name}</span>
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${cfg.badge}`}>
+                                      {node.type}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-gray-600">
+                                    {parent ? (
+                                      <span className="bg-gray-100 px-2 py-0.5 rounded text-[10px] text-gray-700 font-medium">
+                                        {parent.name}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                                        ★ 站点总进线 (根节点)
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5 font-mono text-[10px] text-gray-500">
+                                    {node.sn || `SN-${node.id}`}
+                                  </td>
+                                  <td className="px-3 py-2.5 font-mono text-[10px] text-gray-500">
+                                    {node.model || 'STD-MODEL'}
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    {node.meterBinding ? (
+                                      <span className="text-[10px] text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded font-bold flex items-center space-x-1 w-fit">
+                                        <Gauge size={11} className="text-orange-600" />
+                                        <span>{node.meterBinding.name} ({node.meterBinding.sn})</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-gray-400">未绑定计量电表</span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold flex items-center space-x-1 w-fit">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                      <span>正常在线</span>
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* VIEW MODE 3 & 4: TREE CANVAS (VERTICAL / HORIZONTAL) */}
+                  {(treeLayoutMode === 'vertical' || treeLayoutMode === 'horizontal') && (
                   <div 
                     className="transition-transform duration-150 origin-top flex items-center justify-center p-4 min-w-full"
                     style={{ transform: `scale(${canvasScale})`, transformOrigin: 'top center' }}
@@ -3012,6 +3424,7 @@ export function StationWorkspace({
                       return renderNodeTree(rootNode.id);
                     })()}
                   </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -4170,6 +4583,19 @@ export function StationWorkspace({
           </form>
         </div>
       )}
+
+      {/* Topology Dispatch & Gateway Synchronization Modal */}
+      <TopologyDispatchModal
+        isOpen={isDispatchModalOpen}
+        onClose={() => setIsDispatchModalOpen(false)}
+        station={station}
+        currentTopology={stationTopologies.find(t => t.id === (activeTopoId || stationTopologies[0]?.id)) || stationTopologies[0]}
+        allTopologies={stationTopologies}
+        topoNodes={topoTrees[activeTopoId || 'T01'] || DEFAULT_TOPOLOGY_NODES_MAP['T01'] || []}
+        incomerLines={incomerLines}
+        onDispatchSuccess={handleDispatchSuccess}
+        onRollback={handleRollbackTopo}
+      />
 
     </div>
   );
