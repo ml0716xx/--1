@@ -2179,78 +2179,15 @@ export function StationWorkspace({
         {/* ==================== TAB: INCOMER LINE MANAGEMENT ==================== */}
         {activeTab === 'incomer' && (
           <div className="space-y-5">
-            {/* Top Toolbar & Summary Header */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h3 className="font-bold text-gray-900 text-xs flex items-center space-x-1.5">
-                  <Zap size={14} className="text-amber-500" />
-                  <span>站内进线管理与拓扑绑定映射</span>
-                </h3>
-                <p className="text-[10px] text-gray-500 mt-0.5">
-                  维护站内进线名称与备注说明，标记正在使用的进线，配置与拓扑图的关联关系
-                </p>
-              </div>
-
-              <div className="flex items-center space-x-2 shrink-0">
-                <button
-                  onClick={handleOpenAddIncomer}
-                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1"
-                >
-                  <Plus size={13} />
-                  <span>新增进线</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Statistics Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase">进线总数</span>
-                  <Zap size={15} className="text-amber-500" />
-                </div>
-                <div className="text-2xl font-black text-gray-900 mt-1">{incomerLines.length} <span className="text-xs font-normal text-gray-400">条</span></div>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase">正在使用的进线</span>
-                  <CheckCircle2 size={15} className="text-emerald-500" />
-                </div>
-                <div className="text-2xl font-black text-emerald-600 mt-1">
-                  {incomerLines.filter(l => l.isInUse).length} <span className="text-xs font-normal text-gray-400">/ {incomerLines.length}</span>
-                </div>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase">已绑定进线的拓扑</span>
-                  <Link size={15} className="text-blue-500" />
-                </div>
-                {(() => {
-                  const boundCount = stationTopologies.filter(t => incomerLines.some(l => l.boundTopoIds.includes(t.id))).length;
-                  return (
-                    <div className="text-2xl font-black text-blue-600 mt-1">
-                      {boundCount} <span className="text-xs font-normal text-gray-400">/ {stationTopologies.length}</span>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gray-400 uppercase">未绑定进线的拓扑</span>
-                  <Unlink size={15} className="text-amber-500" />
-                </div>
-                {(() => {
-                  const unboundCount = stationTopologies.filter(t => !incomerLines.some(l => l.boundTopoIds.includes(t.id))).length;
-                  return (
-                    <div className={`text-2xl font-black mt-1 ${unboundCount > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                      {unboundCount} <span className="text-xs font-normal text-gray-400">个</span>
-                    </div>
-                  );
-                })()}
-              </div>
+            {/* Top Toolbar */}
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex justify-end">
+              <button
+                onClick={handleOpenAddIncomer}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1"
+              >
+                <Plus size={13} />
+                <span>新增进线</span>
+              </button>
             </div>
 
             {/* Incomer Lines Grid & Mapping Matrix */}
@@ -2353,8 +2290,7 @@ export function StationWorkspace({
               {/* Right Col: Topology Binding Status Matrix */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-gray-800 flex items-center space-x-1.5">
-                  <span>拓扑进线绑定图谱</span>
-                  <span className="text-[10px] text-gray-400">（1个拓扑只能被1条进线绑定）</span>
+                  <span>拓扑进线绑定明细</span>
                 </h4>
 
                 <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
@@ -2371,16 +2307,11 @@ export function StationWorkspace({
                         </div>
 
                         <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
-                          <span className="text-gray-400 text-[10px]">关联进线状态:</span>
+                          <span className="text-gray-400 text-[10px]">绑定进线:</span>
                           {bindingIncomer ? (
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 border ${
-                              bindingIncomer.isInUse 
-                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200' 
-                                : 'text-gray-600 bg-gray-100 border-gray-200'
-                            }`}>
-                              <Zap size={10} className={bindingIncomer.isInUse ? 'text-emerald-600' : 'text-gray-400'} />
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1 border text-gray-700 bg-gray-50 border-gray-200">
+                              <Zap size={10} className="text-gray-500" />
                               <span>{bindingIncomer.name}</span>
-                              <span className="text-[9px] opacity-80">({bindingIncomer.isInUse ? '使用中' : '备用'})</span>
                             </span>
                           ) : (
                             <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-bold flex items-center space-x-1">
@@ -2443,11 +2374,14 @@ export function StationWorkspace({
                         <button
                           type="button"
                           onClick={() => {
-                            setIncomerForm(prev => ({ ...prev, selectedTopoIds: stationTopologies.map(t => t.id) }));
+                            const selectableIds = stationTopologies
+                              .filter(t => !incomerLines.some(l => l.id !== editingIncomer?.id && l.boundTopoIds.includes(t.id)))
+                              .map(t => t.id);
+                            setIncomerForm(prev => ({ ...prev, selectedTopoIds: selectableIds }));
                           }}
                           className="text-[10px] text-blue-600 font-bold hover:underline"
                         >
-                          全选全部拓扑
+                          全选可绑定拓扑
                         </button>
                       </div>
 
@@ -2455,11 +2389,13 @@ export function StationWorkspace({
                         {stationTopologies.map(topo => {
                           const isChecked = incomerForm.selectedTopoIds.includes(topo.id);
                           const otherBoundLine = incomerLines.find(l => l.id !== editingIncomer?.id && l.boundTopoIds.includes(topo.id));
+                          const isDisabled = !!otherBoundLine;
 
                           return (
                             <div
                               key={topo.id}
                               onClick={() => {
+                                if (isDisabled) return;
                                 setIncomerForm(prev => {
                                   const exists = prev.selectedTopoIds.includes(topo.id);
                                   if (exists) {
@@ -2469,10 +2405,12 @@ export function StationWorkspace({
                                   }
                                 });
                               }}
-                              className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition select-none ${
-                                isChecked
-                                  ? 'bg-blue-50/80 border-blue-300 text-blue-900 font-semibold'
-                                  : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700'
+                              className={`flex items-center justify-between p-2.5 rounded-lg border transition select-none ${
+                                isDisabled
+                                  ? 'bg-gray-100/60 border-gray-200 text-gray-400 cursor-not-allowed'
+                                  : isChecked
+                                    ? 'bg-blue-50/80 border-blue-300 text-blue-900 font-semibold cursor-pointer'
+                                    : 'bg-white border-gray-200 hover:border-gray-300 text-gray-700 cursor-pointer'
                               }`}
                             >
                               <div className="flex items-center space-x-2">
@@ -2485,7 +2423,7 @@ export function StationWorkspace({
                               <div className="flex items-center space-x-2">
                                 {otherBoundLine && !isChecked && (
                                   <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded font-medium">
-                                    绑定在: {otherBoundLine.name}
+                                    已绑定进线: {otherBoundLine.name}
                                   </span>
                                 )}
                                 <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.2 rounded font-mono">{topo.type}</span>
@@ -2525,79 +2463,51 @@ export function StationWorkspace({
             
             {/* Top Toolbar */}
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center space-x-2">
-                  <h3 className="font-bold text-gray-900 text-xs flex items-center space-x-1.5">
-                    <Network size={14} className="text-blue-600" />
-                    <span>站点拓扑管理与组态下发</span>
-                  </h3>
-                  <span className="text-[10px] bg-slate-100 text-slate-700 font-mono px-2 py-0.5 rounded-full font-bold">
-                    共 {stationTopologies.length} 套拓扑方案
-                  </span>
-                  {(() => {
-                    const currentActiveTopo = stationTopologies.find(t => t.id === (activeTopoId || stationTopologies[0]?.id)) || stationTopologies[0];
-                    const isOperational = currentActiveTopo?.id === operationalTopoId;
-                    const depStatus = topoDeploymentStatus[currentActiveTopo?.id]?.status || 'draft';
-                    const version = topoDeploymentStatus[currentActiveTopo?.id]?.version || 'v2.4.0';
-
-                    return (
-                      <div className="flex items-center space-x-1.5 ml-2">
-                        {isOperational ? (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded-full flex items-center space-x-1 shadow-2xs">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                            <span>现场当前运行中 ({version})</span>
-                          </span>
-                        ) : depStatus === 'modified' ? (
-                          <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 font-bold px-2 py-0.5 rounded-full flex items-center space-x-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            <span>有改动待下发</span>
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-gray-100 text-gray-600 font-medium px-2 py-0.5 rounded-full">
-                            备用方案
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-                <p className="text-[10px] text-gray-500 mt-1">支持纵向树/横向树/单线电气图多视角切换；完成拓扑节点与电表配置后，可一键下发至边缘网关生效</p>
+              <div className="flex items-center space-x-2">
+                <h3 className="font-bold text-gray-900 text-xs flex items-center space-x-1.5">
+                  <Network size={14} className="text-blue-600" />
+                  <span>站点拓扑管理与组态下发</span>
+                </h3>
+                <span className="text-[10px] bg-slate-100 text-slate-700 font-mono px-2 py-0.5 rounded-full font-bold">
+                  共 {stationTopologies.length} 套拓扑方案
+                </span>
               </div>
 
               <div className="flex items-center flex-wrap gap-2 shrink-0">
-                {/* Switch Operational Topology Button */}
+                {/* Switch Topology Dropdown: only incomer-bound topologies are switchable */}
                 {(() => {
                   const currentActiveTopo = stationTopologies.find(t => t.id === (activeTopoId || stationTopologies[0]?.id)) || stationTopologies[0];
-                  const isOperational = currentActiveTopo?.id === operationalTopoId;
-                  if (!isOperational && currentActiveTopo) {
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => handleSwitchOperationalTopo(currentActiveTopo.id)}
-                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-lg shadow-2xs transition flex items-center space-x-1.5"
-                        title="将当前选中的拓扑方案切换为现场实际运行的拓扑结构"
-                      >
-                        <CheckCircle2 size={13} className="text-emerald-600" />
-                        <span>设为现场运行主拓扑</span>
-                      </button>
-                    );
-                  }
-                  return null;
-                })()}
+                  const switchableTopos = stationTopologies.filter(t => {
+                    const boundIncomer = incomerLines.find(l => l.boundTopoIds.includes(t.id));
+                    return boundIncomer?.isInUse;
+                  });
+                  const currentOperationalName = stationTopologies.find(t => t.id === operationalTopoId)?.name || currentActiveTopo?.name || '';
 
-                {/* Dispatch Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsDispatchModalOpen(true)}
-                  className="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg shadow-md transition flex items-center space-x-1.5 animate-in fade-in"
-                  title="将当前拓扑配置编译生成报文并下发至天合边缘EMS网关"
-                >
-                  <Send size={13} />
-                  <span>下发拓扑至网关</span>
-                  {topoDeploymentStatus[activeTopoId || 'T01']?.status === 'modified' && (
-                    <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping ml-0.5" />
-                  )}
-                </button>
+                  if (!currentActiveTopo) return null;
+
+                  return (
+                    <div className="relative">
+                      <select
+                        value={operationalTopoId}
+                        onChange={e => handleSwitchOperationalTopo(e.target.value)}
+                        className="appearance-none pl-3 pr-8 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg shadow-md transition flex items-center cursor-pointer border-0 outline-none"
+                        title="切换现场运行拓扑（仅当前使用中进线绑定的拓扑可切换）"
+                      >
+                        {switchableTopos.length === 0 && (
+                          <option value={operationalTopoId}>{currentOperationalName}（无可切换拓扑）</option>
+                        )}
+                        {switchableTopos.map(topo => (
+                          <option key={topo.id} value={topo.id}>
+                            {topo.name}{topo.id === operationalTopoId ? '（运行中）' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-white">
+                        <ChevronDown size={13} />
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <button
                   onClick={handleOpenAddTopo}
@@ -2652,8 +2562,6 @@ export function StationWorkspace({
                 {stationTopologies.map((topo) => {
                   const isActive = (activeTopoId || stationTopologies[0]?.id) === topo.id;
                   const isOperational = topo.id === operationalTopoId;
-                  const boundIncomer = incomerLines.find(l => l.boundTopoIds.includes(topo.id));
-                  const depStatus = topoDeploymentStatus[topo.id]?.status || 'draft';
 
                   return (
                     <button
@@ -2674,22 +2582,6 @@ export function StationWorkspace({
                         )}
                         <span>{topo.name}</span>
                       </div>
-
-                      {isOperational ? (
-                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${isActive ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                          运行中
-                        </span>
-                      ) : depStatus === 'modified' ? (
-                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${isActive ? 'bg-amber-400 text-gray-900' : 'bg-amber-100 text-amber-800'}`}>
-                          待下发
-                        </span>
-                      ) : null}
-
-                      {boundIncomer && (
-                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${isActive ? 'bg-blue-500/80 text-blue-100' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
-                          进线: {boundIncomer.name}
-                        </span>
-                      )}
                     </button>
                   );
                 })}
@@ -2821,7 +2713,7 @@ export function StationWorkspace({
                     </div>
 
                     <p className="text-[10px] text-gray-500 leading-relaxed mb-3">
-                      在编辑模式下，可将本区域待分配设备按住拖拽至右侧画布的目标节点下方吸附组网；也可将画布中的逻辑节点拖回此处复原。
+                      可拖拽设备至右侧画布组网
                     </p>
 
                     {/* Devices List */}
@@ -3120,10 +3012,7 @@ export function StationWorkspace({
                   {treeLayoutMode === 'matrix' && (
                     <div className="w-full max-w-5xl bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden text-xs animate-in fade-in duration-200 my-auto">
                       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                        <div>
-                          <h4 className="font-bold text-gray-900">拓扑节点与通信映射矩阵</h4>
-                          <p className="text-[10px] text-gray-400 mt-0.5">当前方案包含的逻辑拓扑节点、上级从属关系及绑定测量电表点表</p>
-                        </div>
+                        <h4 className="font-bold text-gray-900">拓扑节点与通信映射矩阵</h4>
                         <span className="text-[10px] text-blue-600 font-mono font-bold bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                           共 {(topoTrees[activeTopoId || 'T01'] || []).length} 个节点
                         </span>
@@ -3437,7 +3326,6 @@ export function StationWorkspace({
                   <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
                     <div>
                       <h3 className="text-sm font-bold text-gray-900">{editingTopo ? '修改拓扑属性' : '新增拓扑方案'}</h3>
-                      <p className="text-[10px] text-gray-400 mt-0.5">仅配置拓扑图名称与备注说明，逻辑连线在画布编辑中维护</p>
                     </div>
                     <button onClick={() => setIsTopoModalOpen(false)} className="p-1 hover:bg-gray-100 rounded text-gray-400">
                       <X size={16} />
