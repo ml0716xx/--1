@@ -2179,20 +2179,9 @@ export function StationWorkspace({
         {/* ==================== TAB: INCOMER LINE MANAGEMENT ==================== */}
         {activeTab === 'incomer' && (
           <div className="space-y-5">
-            {/* Top Toolbar */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex justify-end">
-              <button
-                onClick={handleOpenAddIncomer}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1"
-              >
-                <Plus size={13} />
-                <span>新增进线</span>
-              </button>
-            </div>
-
             {/* Incomer Lines Grid & Mapping Matrix */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
+
               {/* Left 2 Cols: Incomer Cards */}
               <div className="lg:col-span-2 space-y-4">
                 <div className="flex items-center justify-between">
@@ -2200,6 +2189,13 @@ export function StationWorkspace({
                     <span>站内进线列表</span>
                     <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{incomerLines.length}</span>
                   </h4>
+                  <button
+                    onClick={handleOpenAddIncomer}
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1"
+                  >
+                    <Plus size={13} />
+                    <span>新增进线</span>
+                  </button>
                 </div>
 
                 <div className="space-y-3">
@@ -2262,7 +2258,6 @@ export function StationWorkspace({
                               <Link size={12} className="text-blue-500" />
                               <span>已绑定的拓扑图 ({boundTopos.length})</span>
                             </span>
-                            <span className="text-[10px] text-gray-400">1个拓扑图独占绑定1条进线</span>
                           </div>
 
                           {boundTopos.length > 0 ? (
@@ -2370,7 +2365,7 @@ export function StationWorkspace({
                     {/* Topology selection checkboxes */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <label className="block text-xs font-bold text-gray-800">选择要绑定的拓扑图 <span className="text-[10px] text-gray-400 font-normal">（可勾选多个；1个拓扑独占绑定1条进线）</span></label>
+                        <label className="block text-xs font-bold text-gray-800">选择要绑定的拓扑图</label>
                         <button
                           type="button"
                           onClick={() => {
@@ -2474,40 +2469,26 @@ export function StationWorkspace({
               </div>
 
               <div className="flex items-center flex-wrap gap-2 shrink-0">
-                {/* Switch Topology Dropdown: only incomer-bound topologies are switchable */}
-                {(() => {
-                  const currentActiveTopo = stationTopologies.find(t => t.id === (activeTopoId || stationTopologies[0]?.id)) || stationTopologies[0];
-                  const switchableTopos = stationTopologies.filter(t => {
-                    const boundIncomer = incomerLines.find(l => l.boundTopoIds.includes(t.id));
-                    return boundIncomer?.isInUse;
-                  });
-                  const currentOperationalName = stationTopologies.find(t => t.id === operationalTopoId)?.name || currentActiveTopo?.name || '';
-
-                  if (!currentActiveTopo) return null;
-
-                  return (
-                    <div className="relative">
-                      <select
-                        value={operationalTopoId}
-                        onChange={e => handleSwitchOperationalTopo(e.target.value)}
-                        className="appearance-none pl-3 pr-8 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg shadow-md transition flex items-center cursor-pointer border-0 outline-none"
-                        title="切换现场运行拓扑（仅当前使用中进线绑定的拓扑可切换）"
-                      >
-                        {switchableTopos.length === 0 && (
-                          <option value={operationalTopoId}>{currentOperationalName}（无可切换拓扑）</option>
-                        )}
-                        {switchableTopos.map(topo => (
-                          <option key={topo.id} value={topo.id}>
-                            {topo.name}{topo.id === operationalTopoId ? '（运行中）' : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-white">
-                        <ChevronDown size={13} />
-                      </div>
-                    </div>
-                  );
-                })()}
+                {/* Switch Topology Button: switch site operational topo to current scheme (only in-use incomer bound topologies allowed) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetId = activeTopoId || stationTopologies[0]?.id;
+                    const targetTopo = stationTopologies.find(t => t.id === targetId);
+                    if (!targetTopo) return;
+                    const boundIncomer = incomerLines.find(l => l.boundTopoIds.includes(targetTopo.id));
+                    if (!boundIncomer || !boundIncomer.isInUse) {
+                      showNotification(`拓扑 [${targetTopo.name}] 未绑定当前使用中的进线，无法切换！`, 'error');
+                      return;
+                    }
+                    handleSwitchOperationalTopo(targetTopo.id);
+                  }}
+                  className="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg shadow-md transition flex items-center space-x-1.5"
+                  title="将当前选中的拓扑方案切换为现场运行拓扑（仅当前使用中进线绑定的拓扑可切换）"
+                >
+                  <RefreshCw size={13} />
+                  <span>切换拓扑</span>
+                </button>
 
                 <button
                   onClick={handleOpenAddTopo}
@@ -2552,39 +2533,32 @@ export function StationWorkspace({
               </div>
             </div>
 
-            {/* Multi-topology Tab & Switching Bar */}
+            {/* Topology Scheme Selector Bar */}
             <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex items-center space-x-2 overflow-x-auto py-0.5 custom-scrollbar">
+              <div className="flex items-center space-x-2 py-0.5">
                 <span className="text-xs font-bold text-gray-500 shrink-0 mr-1 flex items-center space-x-1">
                   <Layers size={13} className="text-blue-600" />
                   <span>切换拓扑方案:</span>
                 </span>
-                {stationTopologies.map((topo) => {
-                  const isActive = (activeTopoId || stationTopologies[0]?.id) === topo.id;
-                  const isOperational = topo.id === operationalTopoId;
-
-                  return (
-                    <button
-                      key={topo.id}
-                      onClick={() => {
-                        setActiveTopoId(topo.id);
-                        setSelectedNodeId(null);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition flex items-center space-x-2 shrink-0 select-none ${
-                        isActive 
-                          ? 'bg-blue-600 border-blue-600 text-white shadow-sm' 
-                          : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-1.5">
-                        {isOperational && (
-                          <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-300' : 'bg-emerald-500'}`} title="现场运行中" />
-                        )}
-                        <span>{topo.name}</span>
-                      </div>
-                    </button>
-                  );
-                })}
+                <div className="relative">
+                  <select
+                    value={activeTopoId || stationTopologies[0]?.id}
+                    onChange={e => {
+                      setActiveTopoId(e.target.value);
+                      setSelectedNodeId(null);
+                    }}
+                    className="appearance-none pl-3 pr-8 py-1.5 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 bg-gray-50 hover:border-gray-300 outline-none cursor-pointer min-w-[180px]"
+                  >
+                    {stationTopologies.map(topo => (
+                      <option key={topo.id} value={topo.id}>
+                        {topo.name}{topo.id === operationalTopoId ? '（运行中）' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                    <ChevronDown size={13} />
+                  </div>
+                </div>
               </div>
 
               {/* Active Topology Details & Actions */}
