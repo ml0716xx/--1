@@ -415,6 +415,11 @@ export function StationWorkspace({
   // Dispatch Modal Open State
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
 
+  // Switch Topology Confirmation (password-verified) state
+  const [switchConfirmTopoId, setSwitchConfirmTopoId] = useState<string | null>(null);
+  const [switchPassword, setSwitchPassword] = useState('');
+  const [switchPasswordError, setSwitchPasswordError] = useState('');
+
   // Switch Active Operational Topology Handler
   const handleSwitchOperationalTopo = (topoId: string) => {
     const targetTopo = stationTopologies.find(t => t.id === topoId);
@@ -425,6 +430,24 @@ export function StationWorkspace({
 
     // Also update bound incomer status if needed
     showNotification(`已成功将 [${targetTopo.name}] 切换为现场当前运行主拓扑！`, 'success');
+  };
+
+  // Confirm switch with password
+  const handleConfirmSwitchTopo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!switchConfirmTopoId) return;
+    if (!switchPassword) {
+      setSwitchPasswordError('请输入操作密码');
+      return;
+    }
+    if (switchPassword !== '123456') {
+      setSwitchPasswordError('密码错误，请重新输入');
+      return;
+    }
+    handleSwitchOperationalTopo(switchConfirmTopoId);
+    setSwitchConfirmTopoId(null);
+    setSwitchPassword('');
+    setSwitchPasswordError('');
   };
 
   // Dispatch Success Handler
@@ -2488,7 +2511,11 @@ export function StationWorkspace({
                     <button
                       type="button"
                       disabled={!isSwitchable || isAlreadyRunning}
-                      onClick={() => handleSwitchOperationalTopo(targetTopo.id)}
+                      onClick={() => {
+                        setSwitchPassword('');
+                        setSwitchPasswordError('');
+                        setSwitchConfirmTopoId(targetTopo.id);
+                      }}
                       className="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed text-white font-bold text-xs rounded-lg shadow-md transition flex items-center space-x-1.5"
                       title={isAlreadyRunning
                         ? '当前方案已是现场运行拓扑'
@@ -2497,7 +2524,7 @@ export function StationWorkspace({
                           : '仅当前使用中进线绑定的拓扑可切换'}
                     >
                       <RefreshCw size={13} />
-                      <span>{isAlreadyRunning ? '切换拓扑' : `切换拓扑: ${targetTopo.name}`}</span>
+                      <span>切换拓扑</span>
                     </button>
                   );
                 })()}
@@ -4457,6 +4484,73 @@ export function StationWorkspace({
           </form>
         </div>
       )}
+
+      {/* Switch Topology Password Confirmation Modal */}
+      {switchConfirmTopoId && (() => {
+        const targetTopo = stationTopologies.find(t => t.id === switchConfirmTopoId);
+        const currentTopo = stationTopologies.find(t => t.id === operationalTopoId);
+        if (!targetTopo) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSwitchConfirmTopoId(null)}></div>
+            <div className="relative bg-white rounded-xl shadow-2xl w-[400px] p-6 text-xs text-gray-700 z-10 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">切换拓扑二次确认</h3>
+                </div>
+                <button onClick={() => setSwitchConfirmTopoId(null)} className="p-1 hover:bg-gray-100 rounded text-gray-400">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleConfirmSwitchTopo} className="space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">当前运行:</span>
+                    <span className="font-bold text-gray-800">{currentTopo?.name || '-'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">切换为:</span>
+                    <span className="font-bold text-blue-700">{targetTopo.name}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">操作密码 <span className="text-red-500">*</span></label>
+                  <input
+                    type="password"
+                    autoFocus
+                    value={switchPassword}
+                    onChange={e => { setSwitchPassword(e.target.value); setSwitchPasswordError(''); }}
+                    placeholder="请输入操作密码"
+                    className={`w-full px-3 py-2 border rounded-lg outline-none focus:border-blue-500 font-medium text-xs ${switchPasswordError ? 'border-red-300' : 'border-gray-200'}`}
+                  />
+                  {switchPasswordError && (
+                    <p className="text-[10px] text-red-500 mt-1">{switchPasswordError}</p>
+                  )}
+                </div>
+
+                <div className="flex justify-end space-x-2 pt-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setSwitchConfirmTopoId(null)}
+                    className="px-4 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded font-bold text-xs"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded font-bold text-xs shadow-sm transition flex items-center space-x-1"
+                  >
+                    <ShieldCheck size={12} />
+                    <span>确认切换</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Topology Dispatch & Gateway Synchronization Modal */}
       <TopologyDispatchModal
