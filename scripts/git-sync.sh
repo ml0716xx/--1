@@ -18,6 +18,9 @@ export GIT_COMMITTER_EMAIL="ml0716xx@users.noreply.github.com"
 export HTTPS_PROXY="${HTTPS_PROXY:-http://127.0.0.1:65455}"
 export HTTP_PROXY="${HTTP_PROXY:-http://127.0.0.1:65455}"
 
+# SSH 远程（走 ssh.github.com:443，见 ~/.ssh/config）
+export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
+
 if [ "$1" = "--check" ]; then
   echo "[git-sync] status check"
   git status --short
