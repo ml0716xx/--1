@@ -320,7 +320,7 @@ export function StationWorkspace({
 
   // Multiple topologies state (多套拓扑维护)
   const [stationTopologies, setStationTopologies] = useState<any[]>(() => {
-    const storageKey = `station_topologies_${station.id || station.name}`;
+    const storageKey = `station_topologies_v2_${station.id || station.name}`;
     const saved = localStorage.getItem(storageKey);
     if (saved) {
       try {
@@ -329,15 +329,15 @@ export function StationWorkspace({
       } catch (e) {}
     }
     return [
-      { id: 'T01', name: '1# 变压器高压侧拓扑图', remarks: '主变与高压开关柜配电逻辑节点', updatedAt: '2026-07-28 10:00' },
-      { id: 'T02', name: '低压Ⅰ段交流母线拓扑图', remarks: '380V低压交流母线及分支逻辑节点', updatedAt: '2026-07-28 10:00' },
-      { id: 'T03', name: '1# 储能充放电系统拓扑图', remarks: '1# PCS变流器与储能电池簇系统', updatedAt: '2026-07-28 10:00' },
-      { id: 'T04', name: '光伏发电并网逆变拓扑图', remarks: '光伏逆变器与并网汇流柜逻辑节点', updatedAt: '2026-07-28 10:00' },
+      { id: 'T01', name: '1# 变压器高压侧拓扑图', type: '高压侧', remarks: '主变与高压开关柜配电逻辑节点', updatedAt: '2026-07-28 10:00' },
+      { id: 'T02', name: '低压Ⅰ段交流母线拓扑图', type: '低压母线', remarks: '380V低压交流母线及分支逻辑节点', updatedAt: '2026-07-28 10:00' },
+      { id: 'T03', name: '1# 储能充放电系统拓扑图', type: '储能系统', remarks: '1# PCS变流器与储能电池簇系统', updatedAt: '2026-07-28 10:00' },
+      { id: 'T04', name: '光伏发电并网逆变拓扑图', type: '光伏系统', remarks: '光伏逆变器与并网汇流柜逻辑节点', updatedAt: '2026-07-28 10:00' },
     ];
   });
 
   useEffect(() => {
-    const storageKey = `station_topologies_${station.id || station.name}`;
+    const storageKey = `station_topologies_v2_${station.id || station.name}`;
     localStorage.setItem(storageKey, JSON.stringify(stationTopologies));
   }, [stationTopologies, station.id, station.name]);
 
@@ -788,7 +788,7 @@ export function StationWorkspace({
 
   // Incomer Line state
   const [incomerLines, setIncomerLines] = useState<any[]>(() => {
-    const storageKey = `incomer_lines_${station.id || station.name}`;
+    const storageKey = `incomer_lines_v2_${station.id || station.name}`;
     const saved = localStorage.getItem(storageKey);
     if (saved) {
       try {
@@ -796,21 +796,29 @@ export function StationWorkspace({
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (e) {}
     }
-    // Default: 1 incomer line, bound to ALL topologies, marked as in-use
+    // Default: 2 incomer lines with multi-topology binding demo
     return [
       {
         id: 'INC_01',
         name: '1# 变压器总进线',
-        remarks: '站内主电源进线，默认绑定全站拓扑',
+        remarks: '站内主电源进线，绑定高压侧与低压母线拓扑',
         isInUse: true,
-        boundTopoIds: ['T01', 'T02', 'T03', 'T04'],
+        boundTopoIds: ['T01', 'T02'],
         createdAt: '2026-07-10 11:30:00'
+      },
+      {
+        id: 'INC_02',
+        name: '2# 变压器总进线',
+        remarks: '二期备用电源进线，绑定储能与光伏拓扑',
+        isInUse: false,
+        boundTopoIds: ['T03', 'T04'],
+        createdAt: '2026-07-12 09:15:00'
       }
     ];
   });
 
   useEffect(() => {
-    const storageKey = `incomer_lines_${station.id || station.name}`;
+    const storageKey = `incomer_lines_v2_${station.id || station.name}`;
     localStorage.setItem(storageKey, JSON.stringify(incomerLines));
   }, [incomerLines, station.id, station.name]);
 
@@ -2463,32 +2471,36 @@ export function StationWorkspace({
                   <Network size={14} className="text-blue-600" />
                   <span>站点拓扑管理与组态下发</span>
                 </h3>
-                <span className="text-[10px] bg-slate-100 text-slate-700 font-mono px-2 py-0.5 rounded-full font-bold">
-                  共 {stationTopologies.length} 套拓扑方案
-                </span>
               </div>
 
               <div className="flex items-center flex-wrap gap-2 shrink-0">
-                {/* Switch Topology Button: switch site operational topo to current scheme (only in-use incomer bound topologies allowed) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const targetId = activeTopoId || stationTopologies[0]?.id;
-                    const targetTopo = stationTopologies.find(t => t.id === targetId);
-                    if (!targetTopo) return;
-                    const boundIncomer = incomerLines.find(l => l.boundTopoIds.includes(targetTopo.id));
-                    if (!boundIncomer || !boundIncomer.isInUse) {
-                      showNotification(`拓扑 [${targetTopo.name}] 未绑定当前使用中的进线，无法切换！`, 'error');
-                      return;
-                    }
-                    handleSwitchOperationalTopo(targetTopo.id);
-                  }}
-                  className="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg shadow-md transition flex items-center space-x-1.5"
-                  title="将当前选中的拓扑方案切换为现场运行拓扑（仅当前使用中进线绑定的拓扑可切换）"
-                >
-                  <RefreshCw size={13} />
-                  <span>切换拓扑</span>
-                </button>
+                {/* Switch Topology Button: applies to currently selected scheme (only in-use incomer bound topologies allowed) */}
+                {(() => {
+                  const targetId = activeTopoId || stationTopologies[0]?.id;
+                  const targetTopo = stationTopologies.find(t => t.id === targetId);
+                  const boundIncomer = targetTopo ? incomerLines.find(l => l.boundTopoIds.includes(targetTopo.id)) : undefined;
+                  const isSwitchable = !!targetTopo && !!boundIncomer?.isInUse;
+                  const isAlreadyRunning = targetId === operationalTopoId;
+
+                  if (!targetTopo) return null;
+
+                  return (
+                    <button
+                      type="button"
+                      disabled={!isSwitchable || isAlreadyRunning}
+                      onClick={() => handleSwitchOperationalTopo(targetTopo.id)}
+                      className="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-300 disabled:cursor-not-allowed text-white font-bold text-xs rounded-lg shadow-md transition flex items-center space-x-1.5"
+                      title={isAlreadyRunning
+                        ? '当前方案已是现场运行拓扑'
+                        : isSwitchable
+                          ? `将 [${targetTopo.name}] 切换为现场运行拓扑`
+                          : '仅当前使用中进线绑定的拓扑可切换'}
+                    >
+                      <RefreshCw size={13} />
+                      <span>{isAlreadyRunning ? '切换拓扑' : `切换拓扑: ${targetTopo.name}`}</span>
+                    </button>
+                  );
+                })()}
 
                 <button
                   onClick={handleOpenAddTopo}
