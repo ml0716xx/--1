@@ -7,7 +7,7 @@ import {
   CheckCircle2, Power, ChevronDown, BatteryCharging, Plug, Gauge, SunMedium, 
   Wind, Flame, Box, Sun, CornerDownRight, Move, ZoomIn, ZoomOut, Maximize2, RotateCcw,
   ChevronLeft, ChevronRight, LayoutGrid, Send, Radio, FileCode, ShieldCheck,
-  History, Eye, Play, Sparkles
+  History, Eye, Play, Sparkles, HardDriveDownload, ChevronsLeft
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -32,11 +32,50 @@ const DEVICE_TYPE_CONFIG: Record<string, { icon: any, color: string, border: str
   '储能消防': { icon: Flame, color: 'text-red-600', border: 'border-red-300', bg: 'bg-red-50', badge: 'bg-red-100 text-red-800' },
 };
 
+// 设备池分类映射（拓扑编辑画布左侧「设备池」筛选用）
+const DEVICE_CATEGORY_MAP: Record<string, string> = {
+  '总进线': '配电', '变压器': '配电', '网关': '配电', '电表': '配电',
+  'PCS': '储能', '电池簇': '储能', '储能': '储能', 'BMS': '储能', '储能空调': '储能', '储能消防': '储能',
+  '逆变器': '光伏', '辐照仪': '光伏',
+  '充电桩': '充电', '充电枪': '充电',
+  'EMS': '配套', '负载': '配套',
+};
+const DEVICE_POOL_CATEGORIES = ['全部', '配套', '配电', '储能', '光伏', '充电'];
+
+// 设备运行状态（原型：按 id 稳定散列模拟 正常/故障/离线）
+type DeviceRunStatus = 'normal' | 'fault' | 'offline';
+const getDeviceRunStatus = (seed: string): DeviceRunStatus => {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 997;
+  if (h % 10 < 8) return 'normal';
+  if (h % 10 < 9) return 'fault';
+  return 'offline';
+};
+const DEVICE_STATUS_DOT: Record<DeviceRunStatus, string> = {
+  normal: 'bg-emerald-500',
+  fault: 'bg-red-500',
+  offline: 'bg-gray-300',
+};
+
 export interface MeterBinding {
   name: string;
   sn: string;
   model?: string;
   relationType?: string;
+}
+
+/**
+ * 计量电表关联（电表在画布上独立于设备树）
+ * 一块电表 = 一个「计量组」：把同一层级的若干设备用虚线框圈起来，电表胶囊挂在框的边上。
+ * 胶囊不隶属任何单台设备，避免「到底测哪一台」的歧义。
+ */
+export interface MeterLink {
+  id: string;
+  name: string;
+  sn: string;
+  model?: string;
+  /** 被计量的设备 id 列表（同一层级，至少 1 台）；虚线框取它们的最小区间 */
+  targetNodeIds: string[];
 }
 
 export interface TopoNode {
@@ -110,6 +149,27 @@ const DEFAULT_TOPOLOGY_NODES_MAP: Record<string, TopoNode[]> = {
     { id: 'node_pv2', name: '50kW 组串逆变器 02', type: '逆变器', parentId: 'node_root', sn: 'PV-50-02', model: 'SUN-50K' },
   ]
 };
+
+// 由默认拓扑里的 meterBinding 迁移出电表关联（电表独立于设备树，可计量同层多台设备）
+const DEFAULT_METER_LINKS_MAP: Record<string, MeterLink[]> = (() => {
+  const map: Record<string, MeterLink[]> = {};
+  Object.entries(DEFAULT_TOPOLOGY_NODES_MAP).forEach(([topoId, nodes]) => {
+    const links: MeterLink[] = [];
+    nodes.forEach(n => {
+      if (n.meterBinding) {
+        links.push({
+          id: `ml_${topoId}_${n.id}`,
+          name: n.meterBinding.name,
+          sn: n.meterBinding.sn,
+          model: n.meterBinding.model,
+          targetNodeIds: [n.id],
+        });
+      }
+    });
+    map[topoId] = links;
+  });
+  return map;
+})();
 
 const DEFAULT_PENDING_DEVICES: PendingDevice[] = [
   { id: 'p_dev_01', name: '2# 变压器 (500kVA)', type: '变压器', sn: 'TR-500-02', model: 'SCB13-500' },
@@ -491,6 +551,146 @@ export function StationWorkspace({
   // Left pending devices sidebar collapse state
   const [isPendingCollapsed, setIsPendingCollapsed] = useState<boolean>(false);
 
+  // 设备池 / 站点树 侧栏 Tab 与筛选状态
+  const [devicePoolTab, setDevicePoolTab] = useState<'pool' | 'tree'>('pool');
+  const [devicePoolFilter, setDevicePoolFilter] = useState<string>('全部');
+  const [treeExpandedIds, setTreeExpandedIds] = useState<Record<string, boolean>>({});
+
+  // 计量电表关联（独立于设备树；一块表只画一处，画在被测设备这一层，计量的是一组同层设备）
+  const [meterLinks, setMeterLinks] = useState<Record<string, MeterLink[]>>(() => {
+    const key = `station_meter_links_v3_${station.id || station.name}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed as Record<string, MeterLink[]>;
+      } catch (e) {}
+    }
+    return DEFAULT_METER_LINKS_MAP;
+  });
+  useEffect(() => {
+    localStorage.setItem(
+      `station_meter_links_v3_${station.id || station.name}`,
+      JSON.stringify(meterLinks)
+    );
+  }, [meterLinks, station.id, station.name]);
+
+  // hover 高亮：记录当前悬停电表的 SN（悬停时高亮它计量那一组同层设备）
+  const [hoveredMeterSn, setHoveredMeterSn] = useState<string | null>(null);
+
+  // 与某节点相关的电表（把它算作计量组的一员）——用于矩阵表
+  const metersRelatedTo = (topoId: string, nodeId: string): MeterLink[] =>
+    (meterLinks[topoId] || []).filter(ml => ml.targetNodeIds.includes(nodeId));
+
+  // 悬停某块电表时，需要高亮的设备集合 = 它计量的那一组同层设备（不含任何父节点）
+  const meterHighlightIds = (topoId: string, sn: string | null): Set<string> => {
+    const ids = new Set<string>();
+    if (!sn) return ids;
+    (meterLinks[topoId] || [])
+      .filter(ml => ml.sn === sn)
+      .forEach(ml => ml.targetNodeIds.forEach(id => ids.add(id)));
+    return ids;
+  };
+
+  // 常显的成员描边：某设备属于任意计量组（用于区分「框住但没被测」的设备）
+  const meterMemberIds = (topoId: string): Set<string> => {
+    const ids = new Set<string>();
+    (meterLinks[topoId] || []).forEach(ml => ml.targetNodeIds.forEach(id => ids.add(id)));
+    return ids;
+  };
+
+  // 同层判定：同一个父节点的直接下级才算「同一层级」
+  const sameLevelAs = (topoId: string, nodeId: string, otherId: string): boolean => {
+    const nodes = topoTrees[topoId] || DEFAULT_TOPOLOGY_NODES_MAP[topoId] || [];
+    const a = nodes.find(n => n.id === nodeId);
+    const b = nodes.find(n => n.id === otherId);
+    if (!a || !b) return false;
+    return (a.parentId || null) === (b.parentId || null);
+  };
+
+  // 让计量组的成员在兄弟里紧挨着排：组里增删成员后自动把成员聚拢，
+  // 这样虚线框只会框住被计量的设备，不会把中间没被测的设备一起圈进去。
+  const compactMeterGroupOrder = (topoId: string, memberIds: string[]) => {
+    if (memberIds.length < 2) return;
+    const memberSet = new Set(memberIds);
+    setTopoTrees(prev => {
+      const nodes = prev[topoId];
+      if (!nodes) return prev;
+      const first = nodes.find(n => n.id === memberIds[0]);
+      if (!first) return prev;
+      const parentId = first.parentId ?? null;
+      const siblings = nodes.filter(n => (n.parentId ?? null) === parentId);
+      const members = siblings.filter(n => memberSet.has(n.id));
+      const others = siblings.filter(n => !memberSet.has(n.id));
+      if (members.length < 2) return prev;
+      // 成员插到「第一个成员原本所在的位置」，其余设备的相对顺序保持不变
+      const firstIdx = siblings.findIndex(n => n.id === memberIds[0]);
+      const before = siblings.slice(0, firstIdx).filter(n => !memberSet.has(n.id)).length;
+      const newSiblings = [...others.slice(0, before), ...members, ...others.slice(before)];
+      if (newSiblings.map(n => n.id).join() === siblings.map(n => n.id).join()) return prev;
+      let cursor = 0;
+      const out = nodes.map(n =>
+        (n.parentId ?? null) === parentId ? newSiblings[cursor++] : n
+      );
+      return { ...prev, [topoId]: out };
+    });
+  };
+
+  // 延迟聚拢：连续删/加多台时不要每操作一次就重排——卡片会挪到光标底下，
+  // 下一次点「移出」就容易点到别的设备上。改成停手一小会儿后再统一聚拢一次。
+  const METER_COMPACT_DELAY = 900;
+  const meterCompactTimerRef = React.useRef<number | null>(null);
+  // 每块表只留最后一次的成员快照，连续操作时中间的快照会被覆盖掉
+  const pendingMeterCompactRef = React.useRef<Record<string, { topoId: string; memberIds: string[] }>>({});
+
+  const flushMeterCompact = () => {
+    if (meterCompactTimerRef.current !== null) {
+      window.clearTimeout(meterCompactTimerRef.current);
+      meterCompactTimerRef.current = null;
+    }
+    const pending = pendingMeterCompactRef.current;
+    pendingMeterCompactRef.current = {};
+    Object.keys(pending).forEach(linkId => {
+      const p = pending[linkId];
+      if (p.memberIds.length >= 2) compactMeterGroupOrder(p.topoId, p.memberIds);
+    });
+  };
+
+  const scheduleMeterCompact = (topoId: string, linkId: string, memberIds: string[]) => {
+    // 覆盖式写入：期间又删了一台，就以最新的成员快照为准（清空到 1 台以下也不再回退到旧快照）
+    pendingMeterCompactRef.current[linkId] = { topoId, memberIds };
+    if (meterCompactTimerRef.current !== null) window.clearTimeout(meterCompactTimerRef.current);
+    meterCompactTimerRef.current = window.setTimeout(() => {
+      meterCompactTimerRef.current = null;
+      flushMeterCompact();
+    }, METER_COMPACT_DELAY);
+  };
+
+  // 切走标签页/卸载时，把还没结算的聚拢清掉
+  useEffect(() => {
+    return () => {
+      if (meterCompactTimerRef.current !== null) {
+        window.clearTimeout(meterCompactTimerRef.current);
+        meterCompactTimerRef.current = null;
+      }
+      pendingMeterCompactRef.current = {};
+    };
+  }, [activeTab]);
+
+  // 计量组虚线框 + 挂在框上的胶囊位置（相对树内容层的布局坐标）
+  type MeterSide = 'right' | 'left' | 'bottom' | 'top';
+  interface MeterBox { x: number; y: number; w: number; h: number; side: MeterSide; inset: number; multi: boolean }
+  const [meterBoxMap, setMeterBoxMap] = useState<Record<string, MeterBox>>({});
+  const meterBoxRef = React.useRef<Record<string, MeterBox>>({});
+
+  // 窗口尺寸变化：画布可视区变了，重算电表胶囊的避让位置
+  const [viewportTick, setViewportTick] = useState(0);
+  useEffect(() => {
+    const onResize = () => setViewportTick(t => t + 1);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Native mouse wheel zoom handler for canvas container
   const canvasContainerRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -512,12 +712,167 @@ export function StationWorkspace({
     return () => {
       container.removeEventListener('wheel', handleWheelZoom);
     };
-  }, []);
+    // 画布容器只在「拓扑维护」Tab 下才挂载，切 Tab 后需要重新绑定滚轮监听
+  }, [activeTab, treeLayoutMode]);
 
-  // Drag and Drop State
-  const [draggedItem, setDraggedItem] = useState<{ id: string, source: 'pending' | 'canvas', type: string, name: string } | null>(null);
+  // ---- 指针拖拽系统（取代 HTML5 DnD）----
+  // HTML5 drag 在「缩放 + 滚动 + flex 居中」的容器里 drop 事件经常落不到目标上，
+  // 改为 pointerdown/move/up + elementFromPoint 命中检测，稳定且可控。
+  type DragSource = 'pending' | 'canvas' | 'meter';
+  const [dragItem, setDragItem] = useState<{ id: string; source: DragSource; type: string; name: string } | null>(null);
+  const dragItemRef = React.useRef<{ id: string; source: DragSource; type: string; name: string } | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
-  const [isDragOverPendingArea, setIsDragOverPendingArea] = useState<boolean>(false);
+  const [isOverPool, setIsOverPool] = useState<boolean>(false);
+  // 拖设备时，正悬停在哪块电表的胶囊上（用于加入计量组的高亮与落点）
+  const [dragOverMeterId, setDragOverMeterId] = useState<string | null>(null);
+  // 展开中的「计量范围」面板（哪块电表）；面板方向按可用空间自动翻转，避免被画布裁掉
+  const [openMeterPanelId, setOpenMeterPanelId] = useState<string | null>(null);
+  const [openMeterPanelUp, setOpenMeterPanelUp] = useState(false);
+  const [openMeterPanelAlignRight, setOpenMeterPanelAlignRight] = useState(false);
+
+  // 画布平移（拖动空白处）
+  const [canvasPan, setCanvasPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const canvasPanRef = React.useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+
+  // 计量组布局：量出每块表「成员设备的最小区间」作为虚线框，再把胶囊挂到框的一条边上（自动避让）。
+  // 框的位置只取决于成员卡片（稳定），胶囊尺寸取自上一帧的实测值，因此不会来回抖动。
+  React.useLayoutEffect(() => {
+    if (activeTab !== 'topo') return;
+    if (treeLayoutMode !== 'vertical' && treeLayoutMode !== 'horizontal') return;
+    const container = canvasContainerRef.current;
+    const content = container?.querySelector('[data-tree-content]') as HTMLElement | null;
+    if (!container || !content) return;
+
+    const raf = requestAnimationFrame(() => {
+      const topoId = activeTopoId || 'T01';
+      const links = meterLinks[topoId] || [];
+      const scale = canvasScale || 1;
+
+      const contentRect = content.getBoundingClientRect();
+      const cardBoxes = Array.from(container!.querySelectorAll('[data-node-id]') as NodeListOf<HTMLElement>)
+        .map(el => ({ id: el.getAttribute('data-node-id') || '', rect: el.getBoundingClientRect() }));
+      const lineBoxes = Array.from(container!.querySelectorAll('[data-connector]') as NodeListOf<HTMLElement>)
+        .map(el => el.getBoundingClientRect());
+
+      const overlapArea = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }) => {
+        const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        return w > 0 && h > 0 ? w * h : 0;
+      };
+
+      // 树形布局下横向贴边不会压到竖直连线；横向布局则优先上下贴边
+      const prefer: MeterSide[] = treeLayoutMode === 'vertical'
+        ? ['right', 'left', 'bottom', 'top']
+        : ['bottom', 'top', 'right', 'left'];
+
+      const containerRect = container!.getBoundingClientRect();
+      const GAP = 6;   // 框与卡片之间留的缝
+      const PAD = 7;   // 框相对成员最小包围盒外扩
+      const STUB = 14; // 框到胶囊之间的引出长度
+
+      const next: Record<string, MeterBox> = {};
+      let changed = false;
+      // 已经排好的框与胶囊（视口坐标），让每块表互不遮挡
+      const placedRects: { left: number; top: number; right: number; bottom: number }[] = [];
+
+      links.forEach((ml, linkIdx) => {
+        const memberRects = ml.targetNodeIds
+          .map(id => cardBoxes.find(c => c.id === id)?.rect)
+          .filter(Boolean) as DOMRect[];
+        if (memberRects.length === 0) return;
+
+        // 成员的最小包围盒（视口坐标）
+        let L = Math.min(...memberRects.map(r => r.left));
+        let T = Math.min(...memberRects.map(r => r.top));
+        let R = Math.max(...memberRects.map(r => r.right));
+        let B = Math.max(...memberRects.map(r => r.bottom));
+        const inset = (linkIdx % 3) * 3; // 多块表嵌套时错开一点，避免框线重合
+        L -= PAD + inset; T -= PAD + inset; R += PAD + inset; B += PAD + inset;
+        const boxRect = { left: L, top: T, right: R, bottom: B };
+
+        // 胶囊尺寸：取上一帧实测，首帧用估值
+        const chipEl = container!.querySelector(`[data-meter-chip="${ml.id}"]`) as HTMLElement | null;
+        const chipRect = chipEl ? chipEl.getBoundingClientRect() : null;
+        const cw = (chipRect ? Math.max(chipRect.width, 90) : 130) / scale;
+        const ch = (chipRect ? Math.max(chipRect.height, 16) : 20) / scale;
+        const sw = STUB / scale;
+        const gw = GAP / scale;
+
+        const obstacles = [
+          ...cardBoxes.map(c => c.rect),
+          ...lineBoxes,
+          ...placedRects,
+        ];
+
+        const cand: Record<MeterSide, { left: number; top: number; right: number; bottom: number }> = {
+          right: { left: boxRect.right + gw, top: (T + B) / 2 - ch / 2, right: boxRect.right + gw + sw + cw, bottom: (T + B) / 2 + ch / 2 },
+          left: { left: boxRect.left - gw - sw - cw, top: (T + B) / 2 - ch / 2, right: boxRect.left - gw, bottom: (T + B) / 2 + ch / 2 },
+          bottom: { left: (L + R) / 2 - cw / 2, top: boxRect.bottom + gw, right: (L + R) / 2 + cw / 2, bottom: boxRect.bottom + gw + sw + ch },
+          top: { left: (L + R) / 2 - cw / 2, top: boxRect.top - gw - sw - ch, right: (L + R) / 2 + cw / 2, bottom: boxRect.top - gw },
+        };
+
+        let best: MeterSide = prefer[0];
+        let bestCost = Number.POSITIVE_INFINITY;
+        prefer.forEach((side, idx) => {
+          const r = cand[side];
+          let cost = 0;
+          obstacles.forEach(o => { cost += overlapArea(o, r); });
+          // 超出画布可视带也要罚，避免框或胶囊跑到看不见的地方
+          const out = Math.max(0, containerRect.left - r.left) + Math.max(0, r.right - containerRect.right)
+            + Math.max(0, containerRect.top - r.top) + Math.max(0, r.bottom - containerRect.bottom);
+          cost += out * 10 + idx * 0.5;
+          if (cost < bestCost) {
+            bestCost = cost;
+            best = side;
+          }
+        });
+
+        placedRects.push(cand[best]);
+        placedRects.push(boxRect);
+
+        next[ml.id] = {
+          x: (boxRect.left - contentRect.left) / scale,
+          y: (boxRect.top - contentRect.top) / scale,
+          w: (boxRect.right - boxRect.left) / scale,
+          h: (boxRect.bottom - boxRect.top) / scale,
+          side: best,
+          inset,
+          multi: ml.targetNodeIds.length > 1,
+        };
+        const prev = meterBoxRef.current[ml.id];
+        if (!prev || prev.x !== next[ml.id].x || prev.y !== next[ml.id].y
+          || prev.w !== next[ml.id].w || prev.h !== next[ml.id].h
+          || prev.side !== next[ml.id].side || prev.multi !== next[ml.id].multi) {
+          changed = true;
+        }
+      });
+
+      // 表被解绑后清掉残留
+      if (Object.keys(meterBoxRef.current).some(id => !next[id])) changed = true;
+
+      meterBoxRef.current = next;
+      if (changed) setMeterBoxMap(next);
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [activeTab, treeLayoutMode, meterLinks, topoTrees, activeTopoId, canvasScale, canvasPan, viewportTick]);
+
+  // 点电表胶囊以外的地方，收起「计量范围」面板
+  useEffect(() => {
+    if (!openMeterPanelId) return;
+    const close = (ev: PointerEvent) => {
+      const el = ev.target as HTMLElement | null;
+      if (el && el.closest('[data-drop-meter]')) return;
+      setOpenMeterPanelId(null);
+      // 面板收起 = 这一轮调整结束，把延迟的聚拢立刻结算
+      flushMeterCompact();
+    };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [openMeterPanelId]);
+
 
   // Topology set modal (Only Name and Remarks)
   const [isTopoModalOpen, setIsTopoModalOpen] = useState(false);
@@ -631,58 +986,75 @@ export function StationWorkspace({
     showNotification(`已新增 [${newDevice.name}] 至待编辑设备区域！`);
   };
 
-  // Handle Drag Start
-  const handleDragStart = (e: React.DragEvent, item: { id: string, name: string, type: string }, source: 'pending' | 'canvas') => {
-    setDraggedItem({ id: item.id, name: item.name, type: item.type, source });
-    e.dataTransfer.setData('text/plain', item.id);
-  };
-
-  // Handle Drop on Canvas Node (Snap Connection or Meter Measurement Relation)
-  const handleDropOnNode = (e: React.DragEvent, targetParentId: string) => {
+  // 开始指针拖拽（设备池卡片 / 画布节点卡片 / 画布上的电表胶囊 通用）
+  const startPointerDrag = (
+    e: React.PointerEvent,
+    item: { id: string; name: string; type: string },
+    source: 'pending' | 'canvas' | 'meter'
+  ) => {
+    if (e.button !== 0) return; // 仅左键
     e.preventDefault();
     e.stopPropagation();
-    setDragOverNodeId(null);
+    const payload = { id: item.id, name: item.name, type: item.type, source };
+    dragItemRef.current = payload;
+    setDragItem(payload);
+    setDragPos({ x: e.clientX, y: e.clientY });
+  };
 
-    if (!draggedItem) return;
-
+  // 落点处理：把设备挂到 targetParentId 下（或与目标建立电表计量关系）
+  const dropOnNode = (
+    item: { id: string; name: string; type: string; source: 'pending' | 'canvas' | 'meter' },
+    targetParentId: string
+  ) => {
     const currentTopoId = activeTopoId || 'T01';
     const currentNodes = topoTrees[currentTopoId] || DEFAULT_TOPOLOGY_NODES_MAP['T01'] || [];
     const targetParent = currentNodes.find(n => n.id === targetParentId);
     const parentName = targetParent ? targetParent.name : '目标节点';
 
-    // Special handling for Electric Meters (电表和测量节点是测量关系，不是树层级连线节点)
-    if (draggedItem.type === '电表') {
-      if (draggedItem.source === 'pending') {
-        const device = pendingDevices.find(p => p.id === draggedItem.id);
+    // Special handling for Electric Meters (电表是计量关系，不是树层级连线节点)
+    if (item.type === '电表') {
+      if (item.source === 'pending') {
+        const device = pendingDevices.find(p => p.id === item.id);
         if (!device) return;
 
-        setTopoTrees(prev => ({
-          ...prev,
-          [currentTopoId]: (prev[currentTopoId] || []).map(n => {
-            if (n.id === targetParentId) {
-              return {
-                ...n,
-                meterBinding: {
-                  name: device.name,
-                  sn: device.sn,
-                  model: device.model,
-                  relationType: '测量节点/关口计量'
-                }
-              };
-            }
-            return n;
-          })
-        }));
+        // 落点即测量组的第一台设备；后续把同层设备拖到电表胶囊上继续加组
+        const dup = (meterLinks[currentTopoId] || []).some(
+          ml => ml.sn === device.sn && ml.targetNodeIds.includes(targetParentId)
+        );
+        if (dup) {
+          showNotification(`设备 [${parentName}] 已在电表 [${device.name}] 的计量组里了。`, 'error');
+          return;
+        }
 
-        setPendingDevices(prev => prev.filter(p => p.id !== draggedItem.id));
-        showNotification(`已建立测量关系：将电表 [${device.name}] 关联至节点 [${parentName}]！`);
+        setMeterLinks(prev => {
+          const list = prev[currentTopoId] || [];
+          return {
+            ...prev,
+            [currentTopoId]: [
+              ...list,
+              {
+                id: `ml_${Date.now()}`,
+                name: device.name,
+                sn: device.sn,
+                model: device.model,
+                // 落点即计量组的第一台成员；后续把同层设备拖到电表胶囊上继续加组
+                targetNodeIds: [targetParentId],
+              },
+            ],
+          };
+        });
+
+        setPendingDevices(prev => prev.filter(p => p.id !== item.id));
+        showNotification(
+          `电表 [${device.name}] 已挂到设备 [${parentName}] 上（当前计量 1 台）。把同层级设备拖到电表上可继续加组。`,
+          'success'
+        );
       }
-      setDraggedItem(null);
       return;
     }
 
-    if (draggedItem.source === 'pending') {
-      const device = pendingDevices.find(p => p.id === draggedItem.id);
+    if (item.source === 'pending') {
+      const device = pendingDevices.find(p => p.id === item.id);
       if (!device) return;
 
       const newNode: TopoNode = {
@@ -700,75 +1072,183 @@ export function StationWorkspace({
         [currentTopoId]: [...(prev[currentTopoId] || []), newNode]
       }));
 
-      setPendingDevices(prev => prev.filter(p => p.id !== draggedItem.id));
-      showNotification(`已自动吸附连线：[${device.name}] 挂载至 [${parentName}] 下级！`);
+      setPendingDevices(prev => prev.filter(p => p.id !== item.id));
+      showNotification(`已自动吸附连线：[${device.name}] 挂载至 [${parentName}] 下级！`, 'success');
 
-    } else if (draggedItem.source === 'canvas') {
-      if (draggedItem.id === targetParentId) {
-        setDraggedItem(null);
-        return;
-      }
+    } else if (item.source === 'canvas') {
+      if (item.id === targetParentId) return;
 
       let curr: string | null = targetParentId;
       let isAncestor = false;
       while (curr) {
-        if (curr === draggedItem.id) {
-          isAncestor = true;
-          break;
-        }
+        if (curr === item.id) { isAncestor = true; break; }
         const p = currentNodes.find(n => n.id === curr);
         curr = p?.parentId || null;
       }
 
       if (isAncestor) {
         showNotification('不能将父节点挂载至其子节点下级！', 'error');
-        setDraggedItem(null);
         return;
+      }
+
+      // 统计被拖动设备的下级数量（子设备随父节点整体重挂载）
+      let subCount = 0;
+      {
+        const moved = new Set<string>([item.id]);
+        let go = true;
+        while (go) {
+          go = false;
+          currentNodes.forEach(n => {
+            if (n.parentId && moved.has(n.parentId) && !moved.has(n.id)) {
+              moved.add(n.id);
+              subCount++;
+              go = true;
+            }
+          });
+        }
       }
 
       setTopoTrees(prev => ({
         ...prev,
-        [currentTopoId]: (prev[currentTopoId] || []).map(n => n.id === draggedItem.id ? { ...n, parentId: targetParentId } : n)
+        [currentTopoId]: (prev[currentTopoId] || []).map(n => n.id === item.id ? { ...n, parentId: targetParentId } : n)
       }));
 
-      showNotification(`节点 [${draggedItem.name}] 自动吸附并重定向连线至 [${parentName}] 下！`);
-    }
+      // 重挂载后：该层级若已有整组同层的计量组（≥2 台），重新聚拢，避免新挂载的设备插进框里
+      {
+        const inLevel = (id: string) => {
+          if (id === item.id) return true; // 被拖动的这台刚落进该层级
+          const n = currentNodes.find(x => x.id === id);
+          return !!n && (n.parentId ?? null) === targetParentId;
+        };
+        (meterLinks[currentTopoId] || [])
+          .filter(ml => ml.targetNodeIds.length >= 2 && ml.targetNodeIds.every(inLevel))
+          .forEach(ml => scheduleMeterCompact(currentTopoId, ml.id, ml.targetNodeIds));
+      }
 
-    setDraggedItem(null);
+      showNotification(
+        subCount > 0
+          ? `已将 [${item.name}] 及其下级 ${subCount} 台设备整体挂载至 [${parentName}] 下！`
+          : `节点 [${item.name}] 已挂载至 [${parentName}] 下！`,
+        'success'
+      );
+    }
   };
 
-  // Handle unbinding meter measurement relationship from node
-  const handleUnbindMeter = (nodeId: string) => {
+  // 解绑电表：整表退回设备池（电表只画一处，× 即整块表解绑）
+  const handleUnbindMeterLink = (linkId: string) => {
     const currentTopoId = activeTopoId || 'T01';
-    const currentNodes = topoTrees[currentTopoId] || [];
-    const targetNode = currentNodes.find(n => n.id === nodeId);
-    if (!targetNode || !targetNode.meterBinding) return;
+    const list = meterLinks[currentTopoId] || [];
+    const link = list.find(ml => ml.id === linkId);
+    if (!link) return;
 
-    const meterBinding = targetNode.meterBinding;
-
-    setTopoTrees(prev => ({
-      ...prev,
-      [currentTopoId]: (prev[currentTopoId] || []).map(n => n.id === nodeId ? { ...n, meterBinding: undefined } : n)
-    }));
-
+    setMeterLinks(prev => ({ ...prev, [currentTopoId]: list.filter(ml => ml.id !== linkId) }));
     const returnedMeter: PendingDevice = {
       id: `p_dev_${Date.now()}`,
-      name: meterBinding.name,
+      name: link.name,
       type: '电表',
-      sn: meterBinding.sn,
-      model: meterBinding.model || 'DTSD1352'
+      sn: link.sn,
+      model: link.model || 'DTSD1352',
     };
-
     setPendingDevices(prev => [returnedMeter, ...prev]);
-    showNotification(`已解绑测量关系，将电表 [${returnedMeter.name}] 退回至待编辑设备区！`);
+    showNotification(`已解绑测量关系，电表 [${link.name}] 退回设备池！`, 'success');
   };
 
-  // Handle returning node from canvas to Pending Devices Area
+  // 加组：把一台设备拖到电表胶囊上，纳入该表的计量组（必须与组内设备同层级）
+  const handleAddToMeterGroup = (linkId: string, deviceId: string) => {
+    const currentTopoId = activeTopoId || 'T01';
+    const list = meterLinks[currentTopoId] || [];
+    const link = list.find(ml => ml.id === linkId);
+    if (!link) return;
+    if (link.targetNodeIds.includes(deviceId)) {
+      showNotification('该设备已经在这块电表的计量组里了。', 'error');
+      return;
+    }
+    const nodes = topoTrees[currentTopoId] || [];
+    const device = nodes.find(n => n.id === deviceId);
+    if (!device) return;
+    // 只能加同层级（同一个父节点的直接下级）的设备
+    if (!sameLevelAs(currentTopoId, link.targetNodeIds[0], deviceId)) {
+      showNotification(
+        `[${device.name}] 与这块电表当前的计量设备不在同一层级，只能加同层级的设备。`,
+        'error'
+      );
+      return;
+    }
+    setMeterLinks(prev => ({
+      ...prev,
+      [currentTopoId]: (prev[currentTopoId] || []).map(ml =>
+        ml.id === linkId ? { ...ml, targetNodeIds: [...ml.targetNodeIds, deviceId] } : ml
+      ),
+    }));
+    // 新成员可能与组内设备隔着一个没被测的设备，稍后自动聚拢（连续加多台只重排一次）
+    scheduleMeterCompact(currentTopoId, linkId, [...link.targetNodeIds, deviceId]);
+    showNotification(
+      `已把设备 [${device.name}] 加入电表 [${link.name}] 的计量组（当前 ${link.targetNodeIds.length + 1} 台同层设备）。`,
+      'success'
+    );
+  };
+
+  // 移出成员：从计量组里去掉一台设备（整组不能为空；空了等同解绑）
+  const handleRemoveMeterMember = (linkId: string, deviceId: string) => {
+    const currentTopoId = activeTopoId || 'T01';
+    const list = meterLinks[currentTopoId] || [];
+    const link = list.find(ml => ml.id === linkId);
+    if (!link) return;
+    const remaining = link.targetNodeIds.filter(id => id !== deviceId);
+    if (remaining.length === 0) {
+      handleUnbindMeterLink(linkId);
+      return;
+    }
+    const nodes = topoTrees[currentTopoId] || [];
+    const device = nodes.find(n => n.id === deviceId);
+    setMeterLinks(prev => ({
+      ...prev,
+      [currentTopoId]: (prev[currentTopoId] || []).map(ml =>
+        ml.id === linkId ? { ...ml, targetNodeIds: remaining } : ml
+      ),
+    }));
+    // 移出的是框中间的设备，剩余成员会被没被测的设备隔开 —— 延迟聚拢，
+    // 让领导能接着删下一台而不必追着移动中的卡片点
+    scheduleMeterCompact(currentTopoId, linkId, remaining);
+    showNotification(`已把设备 [${device ? device.name : deviceId}] 移出该电表的计量组。`, 'success');
+  };
+
+  // 改挂电表：把胶囊拖到另一台设备上——同层则并入，跨层则重置为这一台
+  const handleReanchorMeterLink = (linkId: string, targetNodeId: string) => {
+    const currentTopoId = activeTopoId || 'T01';
+    const list = meterLinks[currentTopoId] || [];
+    const nodes = topoTrees[currentTopoId] || [];
+    const link = list.find(ml => ml.id === linkId);
+    const target = nodes.find(n => n.id === targetNodeId);
+    if (!link || !target) return;
+    // 已经是组里唯一一台，原地放下不动
+    if (link.targetNodeIds.length === 1 && link.targetNodeIds[0] === targetNodeId) return;
+
+    const sameLevel = sameLevelAs(currentTopoId, link.targetNodeIds[0], targetNodeId);
+    const nextTargets = sameLevel
+      ? Array.from(new Set([...link.targetNodeIds, targetNodeId]))
+      : [targetNodeId];
+
+    setMeterLinks(prev => ({
+      ...prev,
+      [currentTopoId]: (prev[currentTopoId] || []).map(ml =>
+        ml.id === linkId ? { ...ml, targetNodeIds: nextTargets } : ml
+      ),
+    }));
+    if (sameLevel) scheduleMeterCompact(currentTopoId, linkId, nextTargets);
+    showNotification(
+      sameLevel
+        ? `电表 [${link.name}] 的计量组已加入 [${target.name}]（当前 ${nextTargets.length} 台同层设备）。`
+        : `电表 [${link.name}] 的计量组已改为只测 [${target.name}]。原组员与它不同层级。`,
+      'success'
+    );
+  };
+
+  // 退回设备池：该设备及其全部下级一并退回（非硬删除），关联电表同步处理
   const handleRemoveNodeToPending = (nodeId: string) => {
     const currentTopoId = activeTopoId || 'T01';
     const currentNodes = topoTrees[currentTopoId] || [];
     const nodeToRemove = currentNodes.find(n => n.id === nodeId);
-    
     if (!nodeToRemove) return;
 
     if (nodeToRemove.type === '总进线' || nodeToRemove.parentId === null) {
@@ -776,37 +1256,186 @@ export function StationWorkspace({
       return;
     }
 
-    const updatedNodes = currentNodes
-      .filter(n => n.id !== nodeId)
-      .map(n => n.parentId === nodeId ? { ...n, parentId: nodeToRemove.parentId } : n);
+    // 收集该设备及其全部下级设备
+    const removeIds = new Set<string>([nodeId]);
+    let growing = true;
+    while (growing) {
+      growing = false;
+      currentNodes.forEach(n => {
+        if (n.parentId && removeIds.has(n.parentId) && !removeIds.has(n.id)) {
+          removeIds.add(n.id);
+          growing = true;
+        }
+      });
+    }
 
-    setTopoTrees(prev => ({
-      ...prev,
-      [currentTopoId]: updatedNodes
+    const removedNodes = currentNodes.filter(n => removeIds.has(n.id));
+    const remainingNodes = currentNodes.filter(n => !removeIds.has(n.id));
+
+    const stamp = Date.now();
+    const returnedDevices: PendingDevice[] = removedNodes.map((n, i) => ({
+      id: `p_dev_${stamp}_${i}`,
+      name: n.name,
+      type: n.type,
+      sn: n.sn || `SN-${n.id}`,
+      model: n.model || `${n.type}-MOD`,
     }));
 
-    const returnedDevice: PendingDevice = {
-      id: `p_dev_${Date.now()}`,
-      name: nodeToRemove.name,
-      type: nodeToRemove.type,
-      sn: nodeToRemove.sn || `SN-${nodeToRemove.id}`,
-      model: nodeToRemove.model || `${nodeToRemove.type}-MOD`
-    };
+    // 电表：胶囊所在设备被删则整表退回；否则只把被删设备从计量组里摘掉
+    const list = meterLinks[currentTopoId] || [];
+    const keptMeters: MeterLink[] = [];
+    const returnedMeters: PendingDevice[] = [];
+    list.forEach(ml => {
+      const remainingTargets = ml.targetNodeIds.filter(id => !removeIds.has(id));
+      if (remainingTargets.length === 0) {
+        // 计量组被清空 = 这块表在画布上没处可挂，整表退回设备池
+        returnedMeters.push({
+          id: `p_dev_${stamp}_m_${ml.id}`,
+          name: ml.name,
+          type: '电表',
+          sn: ml.sn,
+          model: ml.model || 'DTSD1352',
+        });
+      } else {
+        keptMeters.push({ ...ml, targetNodeIds: remainingTargets });
+      }
+    });
 
-    setPendingDevices(prev => [returnedDevice, ...prev]);
-    showNotification(`已将设备 [${nodeToRemove.name}] 退回至待编辑设备区域！`);
+    setTopoTrees(prev => ({ ...prev, [currentTopoId]: remainingNodes }));
+    setMeterLinks(prev => ({ ...prev, [currentTopoId]: keptMeters }));
+    setPendingDevices(prev => [...returnedDevices, ...returnedMeters, ...prev]);
+    // 被删设备原本夹在组中间时，剩余成员稍后自动聚拢（连续的删除/退回会合并成一次）
+    keptMeters.forEach(ml => scheduleMeterCompact(currentTopoId, ml.id, ml.targetNodeIds));
+
+    const extra = removedNodes.length - 1;
+    showNotification(
+      extra > 0
+        ? `已将 [${nodeToRemove.name}] 及其下级 ${extra} 台设备一并退回设备池！`
+        : `已将设备 [${nodeToRemove.name}] 退回设备池！`,
+      'success'
+    );
   };
 
-  // Handle Drop on Pending Devices Area
-  const handleDropOnPendingArea = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOverPendingArea(false);
+  // 拖设备时，电表胶囊很小不容易对准：命中不到时找最近的一块（26px 以内也算命中）
+  const meterChipNear = (x: number, y: number, radius = 26): string | null => {
+    const chips = document.querySelectorAll('[data-meter-chip]');
+    let bestId: string | null = null;
+    let bestDist = radius;
+    chips.forEach(c => {
+      const r = (c as HTMLElement).getBoundingClientRect();
+      const dx = Math.max(r.left - x, 0, x - r.right);
+      const dy = Math.max(r.top - y, 0, y - r.bottom);
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < bestDist) {
+        bestDist = d;
+        bestId = c.getAttribute('data-meter-chip');
+      }
+    });
+    return bestId;
+  };
 
-    if (draggedItem && draggedItem.source === 'canvas') {
-      handleRemoveNodeToPending(draggedItem.id);
-    }
-    setDraggedItem(null);
+  // 指针拖拽：全局监听，指针移出容器也能正常结算（HTML5 DnD 的 drop 做不到）
+  useEffect(() => {
+    if (!dragItem) return;
+
+    const onMove = (ev: PointerEvent) => {
+      setDragPos({ x: ev.clientX, y: ev.clientY });
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const nodeEl = el?.closest('[data-node-id]') as HTMLElement | null;
+      const meterEl = el?.closest('[data-drop-meter]') as HTMLElement | null;
+      setDragOverNodeId(nodeEl ? nodeEl.getAttribute('data-node-id') : null);
+      setDragOverMeterId(
+        meterEl ? meterEl.getAttribute('data-drop-meter') : meterChipNear(ev.clientX, ev.clientY)
+      );
+      setIsOverPool(!!el?.closest('[data-drop-pool]'));
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const nodeEl = el?.closest('[data-node-id]') as HTMLElement | null;
+      const meterEl = el?.closest('[data-drop-meter]') as HTMLElement | null;
+      const meterId = meterEl
+        ? meterEl.getAttribute('data-drop-meter')
+        : meterChipNear(ev.clientX, ev.clientY);
+      const overPool = !!el?.closest('[data-drop-pool]');
+      const payload = dragItemRef.current;
+
+      if (payload) {
+        if (payload.source === 'meter') {
+          // 电表胶囊：拖回设备池 = 解绑整表；拖到设备上 = 改挂 / 并入同层计量组
+          if (overPool) {
+            handleUnbindMeterLink(payload.id);
+          } else if (nodeEl) {
+            handleReanchorMeterLink(payload.id, nodeEl.getAttribute('data-node-id') as string);
+          }
+        } else if (meterId && payload.source === 'canvas') {
+          // 把画布上的一台设备拖到电表上 = 纳入该表的计量组
+          handleAddToMeterGroup(meterId, payload.id);
+        } else if (meterId && payload.source === 'pending') {
+          showNotification('请先把这台设备挂到拓扑上，再拖到电表上加入计量组。', 'error');
+        } else if (overPool && payload.source === 'canvas') {
+          // 拖回设备池 = 删除（该设备及其全部下级一并退回）
+          handleRemoveNodeToPending(payload.id);
+        } else if (nodeEl) {
+          dropOnNode(payload, nodeEl.getAttribute('data-node-id') as string);
+        }
+      }
+
+      dragItemRef.current = null;
+      setDragItem(null);
+      setDragPos(null);
+      setDragOverNodeId(null);
+      setDragOverMeterId(null);
+      setIsOverPool(false);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [dragItem]);
+
+  // 画布平移：全局监听
+  useEffect(() => {
+    if (!isPanning) return;
+    const onMove = (ev: PointerEvent) => {
+      const st = canvasPanRef.current;
+      if (!st) return;
+      setCanvasPan({ x: st.baseX + (ev.clientX - st.startX), y: st.baseY + (ev.clientY - st.startY) });
+    };
+    const onUp = () => {
+      canvasPanRef.current = null;
+      setIsPanning(false);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [isPanning]);
+
+  // 画布空白处按下 → 开始平移（点在卡片/按钮/下拉/输入框上则不触发）
+  const handleCanvasPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const el = e.target as HTMLElement;
+    if (
+      el.closest('[data-node-id]') ||
+      el.closest('[data-meter-chip]') ||
+      el.closest('[data-pool-card]') ||
+      el.closest('button') ||
+      el.closest('select') ||
+      el.closest('input')
+    ) return;
+    e.preventDefault();
+    canvasPanRef.current = { startX: e.clientX, startY: e.clientY, baseX: canvasPan.x, baseY: canvasPan.y };
+    setIsPanning(true);
   };
 
   // Incomer Line state
@@ -952,9 +1581,14 @@ export function StationWorkspace({
   };
 
   const handleSyncTopologyFromLocal = () => {
+    if (isSyncingTopo) return;
     setIsSyncingTopo(true);
     setTimeout(() => {
-      setIsSyncingTopo(false);
+      const now = new Date();
+      const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const syncedCount = stationTopologies.length;
+
+      // 同步全部本地拓扑：刷新现场运行拓扑的物理连线，并更新各套拓扑的同步时间
       setTopoConnections([
         { from: 'grid', to: 'gw' },
         { from: 'gw', to: 'trans' },
@@ -966,8 +1600,10 @@ export function StationWorkspace({
         { from: 'ess2', to: 'bat1' },
         { from: 'ess2', to: 'bat2' }
       ]);
-      showNotification('已成功从本地网关 (SN: 8842b5) 同步最新拓扑节点与物理连线！');
-    }, 600);
+      setStationTopologies(prev => prev.map(t => ({ ...t, updatedAt: stamp })));
+      setIsSyncingTopo(false);
+      showNotification(`同步完成：已从本地网关 (SN: 8842b5) 同步 ${syncedCount} 套拓扑方案，节点与连线关系已更新！`, 'success');
+    }, 800);
   };
 
   const allVersions = versions || INITIAL_VERSIONS;
@@ -2296,6 +2932,7 @@ export function StationWorkspace({
                               {boundTopos.map(t => (
                                 <div key={t.id} className="flex items-center space-x-1.5 bg-blue-50/70 border border-blue-200 text-blue-800 px-2.5 py-1 rounded-lg text-xs font-medium">
                                   <Network size={12} className="text-blue-600" />
+                                  <span className="text-[9px] bg-blue-600 text-white font-mono font-bold px-1 py-0.2 rounded" title="拓扑 ID">{t.id}</span>
                                   <span>{t.name}</span>
                                   <span className="text-[9px] bg-blue-200/60 text-blue-900 font-mono px-1 rounded">{t.type}</span>
                                 </div>
@@ -2325,8 +2962,9 @@ export function StationWorkspace({
                     return (
                       <div key={topo.id} className="p-3 rounded-lg border border-gray-100 bg-gray-50/40 hover:bg-gray-50 transition space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-gray-800 text-xs flex items-center space-x-1">
+                          <span className="font-bold text-gray-800 text-xs flex items-center space-x-1.5">
                             <Network size={13} className="text-blue-600" />
+                            <span className="text-[9px] bg-blue-600 text-white font-mono font-bold px-1.5 py-0.2 rounded" title="拓扑 ID（同步本地拓扑时按此 ID 匹配）">{topo.id}</span>
                             <span>{topo.name}</span>
                           </span>
                           <span className="text-[9px] bg-gray-200 text-gray-600 px-1.5 py-0.2 rounded font-mono">{topo.type}</span>
@@ -2443,6 +3081,7 @@ export function StationWorkspace({
                                 <div className={`w-4 h-4 rounded flex items-center justify-center border text-white ${isChecked ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'}`}>
                                   {isChecked && <Check size={11} />}
                                 </div>
+                                <span className="text-[9px] bg-blue-600 text-white font-mono font-bold px-1.5 py-0.2 rounded" title="拓扑 ID">{topo.id}</span>
                                 <span className="text-xs font-medium">{topo.name}</span>
                               </div>
 
@@ -2485,17 +3124,100 @@ export function StationWorkspace({
 
         {/* ==================== TAB 3: TOPOLOGY MAINTENANCE ==================== */}
         {activeTab === 'topo' && (
-          <div className="space-y-4">
+          <div className="h-full min-h-0 flex flex-col gap-4">
             
-            {/* Top Toolbar */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-              <div className="flex items-center space-x-2">
-                <h3 className="font-bold text-gray-900 text-xs flex items-center space-x-1.5">
-                  <Network size={14} className="text-blue-600" />
-                  <span>站点拓扑管理与组态下发</span>
-                </h3>
+            {/* Top Toolbar: 拓扑方案选择 + 操作按钮（合并为一行） */}
+            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+              {/* 左侧：拓扑方案下拉 + 当前方案操作图标 */}
+              <div className="flex items-center flex-wrap gap-2 py-0.5">
+                <span className="text-xs font-bold text-gray-500 shrink-0 flex items-center space-x-1">
+                  <Layers size={13} className="text-blue-600" />
+                  <span>切换拓扑方案:</span>
+                </span>
+                <div className="relative">
+                  <select
+                    value={activeTopoId || stationTopologies[0]?.id}
+                    onChange={e => {
+                      setActiveTopoId(e.target.value);
+                      setSelectedNodeId(null);
+                    }}
+                    className="appearance-none pl-3 pr-8 py-1.5 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 bg-gray-50 hover:border-gray-300 outline-none cursor-pointer min-w-[180px]"
+                  >
+                    {stationTopologies.map(topo => (
+                      <option key={topo.id} value={topo.id}>
+                        [{topo.id}] {topo.name}{topo.id === operationalTopoId ? '（运行中）' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                    <ChevronDown size={13} />
+                  </div>
+                </div>
+
+                {/* 修改属性 / 编辑拓扑 / 删除拓扑 —— 图标按钮，置于方案下拉框右侧 */}
+                {(() => {
+                  const currentActiveTopo = stationTopologies.find(t => t.id === (activeTopoId || stationTopologies[0]?.id)) || stationTopologies[0];
+                  if (!currentActiveTopo) return null;
+                  return (
+                    <div className="flex items-center space-x-1 pl-2 ml-0.5 border-l border-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditTopo(currentActiveTopo)}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition"
+                        title="修改拓扑属性（名称/备注）"
+                      >
+                        <Settings size={14} />
+                      </button>
+
+                      {isTopologyEditMode ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsTopologyEditMode(false);
+                            setDragOverNodeId(null);
+                            // Mark as modified if edited
+                            setTopoDeploymentStatus(prev => ({
+                              ...prev,
+                              [activeTopoId || 'T01']: {
+                                ...(prev[activeTopoId || 'T01'] || {}),
+                                status: 'modified'
+                              }
+                            }));
+                            showNotification('拓扑修改完成，连线关系已本地暂存！');
+                          }}
+                          className="p-1.5 text-white bg-emerald-600 hover:bg-emerald-700 border border-emerald-600 rounded-lg transition"
+                          title="完成编辑"
+                        >
+                          <CheckCircle2 size={14} />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsTopologyEditMode(true);
+                            showNotification('已进入拓扑编辑模式：可拖拽待编辑设备到节点下吸附组网，也可建立电表测量关联');
+                          }}
+                          className="p-1.5 text-gray-700 hover:bg-gray-100 border border-gray-300 rounded-lg transition"
+                          title="编辑拓扑连线"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTopo(currentActiveTopo.id, currentActiveTopo.name)}
+                        className="p-1.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
+                        title="删除此套拓扑图配置"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
+              {/* 右侧：切换拓扑 / 新增拓扑 / 同步本地拓扑 */}
               <div className="flex items-center flex-wrap gap-2 shrink-0">
                 {/* Switch Topology Button: applies to currently selected scheme (only in-use incomer bound topologies allowed) */}
                 {(() => {
@@ -2530,6 +3252,7 @@ export function StationWorkspace({
                 })()}
 
                 <button
+                  type="button"
                   onClick={handleOpenAddTopo}
                   className="px-3 py-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-bold text-xs rounded-lg shadow-2xs transition flex items-center space-x-1"
                 >
@@ -2537,112 +3260,31 @@ export function StationWorkspace({
                   <span>新增拓扑</span>
                 </button>
 
-                {isTopologyEditMode ? (
-                  <button 
-                    onClick={() => {
-                      setIsTopologyEditMode(false);
-                      setDragOverNodeId(null);
-                      // Mark as modified if edited
-                      setTopoDeploymentStatus(prev => ({
-                        ...prev,
-                        [activeTopoId || 'T01']: {
-                          ...(prev[activeTopoId || 'T01'] || {}),
-                          status: 'modified'
-                        }
-                      }));
-                      showNotification('拓扑修改完成，连线关系已本地暂存（可点击“下发拓扑”同步至边缘网关）！');
-                    }}
-                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1.5"
-                  >
-                    <CheckCircle2 size={13} />
-                    <span>完成编辑</span>
-                  </button>
-                ) : (
-                  <button 
-                    onClick={() => {
-                      setIsTopologyEditMode(true);
-                      showNotification('已进入拓扑编辑模式：可拖拽待编辑设备到节点下吸附组网，也可建立电表测量关联');
-                    }}
-                    className="px-3.5 py-1.5 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-lg shadow-sm transition flex items-center space-x-1.5"
-                  >
-                    <Edit2 size={13} />
-                    <span>编辑拓扑</span>
-                  </button>
-                )}
+                {/* 同步本地拓扑：一键同步本地全部拓扑方案 */}
+                <button
+                  type="button"
+                  onClick={handleSyncTopologyFromLocal}
+                  disabled={isSyncingTopo}
+                  className="px-3 py-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-bold text-xs rounded-lg shadow-2xs transition flex items-center space-x-1 disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="从本地网关同步全部拓扑方案的节点与连线关系"
+                >
+                  <HardDriveDownload size={13} className={isSyncingTopo ? 'animate-pulse' : ''} />
+                  <span>{isSyncingTopo ? '同步中...' : '同步本地拓扑'}</span>
+                </button>
               </div>
-            </div>
-
-            {/* Topology Scheme Selector Bar */}
-            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex items-center space-x-2 py-0.5">
-                <span className="text-xs font-bold text-gray-500 shrink-0 mr-1 flex items-center space-x-1">
-                  <Layers size={13} className="text-blue-600" />
-                  <span>切换拓扑方案:</span>
-                </span>
-                <div className="relative">
-                  <select
-                    value={activeTopoId || stationTopologies[0]?.id}
-                    onChange={e => {
-                      setActiveTopoId(e.target.value);
-                      setSelectedNodeId(null);
-                    }}
-                    className="appearance-none pl-3 pr-8 py-1.5 border border-gray-200 rounded-lg text-xs font-bold text-gray-800 bg-gray-50 hover:border-gray-300 outline-none cursor-pointer min-w-[180px]"
-                  >
-                    {stationTopologies.map(topo => (
-                      <option key={topo.id} value={topo.id}>
-                        {topo.name}{topo.id === operationalTopoId ? '（运行中）' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                    <ChevronDown size={13} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Active Topology Details & Actions */}
-              {(() => {
-                const currentActiveTopo = stationTopologies.find(t => t.id === (activeTopoId || stationTopologies[0]?.id)) || stationTopologies[0];
-                if (!currentActiveTopo) return null;
-                return (
-                  <div className="flex items-center space-x-2 shrink-0 pl-3 border-l border-gray-200">
-                    <button
-                      onClick={() => handleOpenEditTopo(currentActiveTopo)}
-                      className="px-2.5 py-1 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded text-xs font-bold transition flex items-center space-x-1"
-                      title="修改拓扑名称与备注说明"
-                    >
-                      <Edit2 size={12} />
-                      <span>修改属性</span>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteTopo(currentActiveTopo.id, currentActiveTopo.name)}
-                      className="px-2.5 py-1 text-red-600 hover:bg-red-50 border border-red-200 rounded text-xs font-medium transition flex items-center space-x-1"
-                      title="删除此套拓扑图配置"
-                    >
-                      <Trash2 size={12} />
-                      <span>删除拓扑</span>
-                    </button>
-                  </div>
-                );
-              })()}
             </div>
 
             {/* Main Topology Editor Workspace Container */}
-            <div className="flex flex-col xl:flex-row gap-4 items-start">
+            <div className="flex-1 min-h-[420px] flex flex-col xl:flex-row gap-4">
               
               {/* Left Side: Pending Device Area (待编辑设备区域) */}
               {(isPendingCollapsed || pendingDevices.length === 0) ? (
                 /* Collapsed / Empty Sidebar state - retracts to the left */
                 <div 
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (isTopologyEditMode && !isDragOverPendingArea) setIsDragOverPendingArea(true);
-                  }}
-                  onDragLeave={() => isDragOverPendingArea && setIsDragOverPendingArea(false)}
-                  onDrop={handleDropOnPendingArea}
+                  data-drop-pool="1"
                   onClick={() => setIsPendingCollapsed(false)}
-                  className={`w-12 shrink-0 bg-white rounded-xl border-2 transition-all p-2 flex flex-col items-center justify-between cursor-pointer hover:bg-gray-50 shadow-xs min-h-[500px] ${
-                    isDragOverPendingArea ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-300' : 'border-gray-200'
+                  className={`w-12 shrink-0 bg-white rounded-xl border-2 transition-all p-2 flex flex-col items-center justify-between cursor-pointer hover:bg-gray-50 shadow-xs min-h-[220px] xl:min-h-0 ${
+                    isOverPool ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-300' : 'border-gray-200'
                   }`}
                   title="点击展开待编辑设备栏"
                 >
@@ -2672,7 +3314,7 @@ export function StationWorkspace({
                     </div>
                   </div>
 
-                  {isDragOverPendingArea && (
+                  {isOverPool && (
                     <div className="text-[9px] bg-amber-200 text-amber-900 font-bold p-1 rounded text-center animate-pulse">
                       松开退回
                     </div>
@@ -2692,85 +3334,159 @@ export function StationWorkspace({
                   </div>
                 </div>
               ) : (
-                /* Expanded Pending Device Sidebar */
+                /* Expanded Sidebar: 设备池 / 站点树 */
                 <div 
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (isTopologyEditMode && !isDragOverPendingArea) setIsDragOverPendingArea(true);
-                  }}
-                  onDragLeave={() => isDragOverPendingArea && setIsDragOverPendingArea(false)}
-                  onDrop={handleDropOnPendingArea}
-                  className={`w-full xl:w-72 shrink-0 bg-white rounded-xl border-2 transition-all p-4 space-y-3.5 flex flex-col justify-between ${
-                    isDragOverPendingArea ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-300' : 'border-gray-200'
+                  data-drop-pool="1"
+                  className={`w-full xl:w-64 shrink-0 bg-white rounded-xl border transition-all flex flex-col min-h-0 max-h-[60vh] xl:max-h-none ${
+                    isOverPool ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-300' : 'border-gray-200'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-center justify-between border-b border-gray-100 pb-2.5 mb-2.5">
-                      <div className="flex items-center space-x-1.5">
-                        <Box size={15} className="text-amber-600" />
-                        <h4 className="font-bold text-xs text-gray-900">待编辑设备区域</h4>
-                      </div>
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full font-mono">
-                          {pendingDevices.length} 台
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setIsPendingCollapsed(true)}
-                          className="p-1 hover:bg-gray-100 text-gray-500 rounded transition"
-                          title="向左缩进隐藏"
-                        >
-                          <ChevronLeft size={15} />
-                        </button>
-                      </div>
+                  {/* 站点名 + Tab 切换 */}
+                  <div className="px-3 pt-3 pb-0 border-b border-gray-100 shrink-0">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-gray-900">{station.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsPendingCollapsed(true)}
+                        className="p-1 hover:bg-gray-100 text-gray-400 hover:text-gray-700 rounded transition"
+                        title="收起面板"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
                     </div>
-
-                    <p className="text-[10px] text-gray-500 leading-relaxed mb-3">
-                      可拖拽设备至右侧画布组网
-                    </p>
-
-                    {/* Devices List */}
-                    <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1 custom-scrollbar">
-                      {pendingDevices.map(device => {
-                        const cfg = DEVICE_TYPE_CONFIG[device.type] || DEVICE_TYPE_CONFIG['变压器'];
-                        const DevIcon = cfg.icon;
-                        return (
-                          <div
-                            key={device.id}
-                            draggable="true"
-                            onDragStart={(e) => handleDragStart(e, { id: device.id, name: device.name, type: device.type }, 'pending')}
-                            className={`p-2.5 rounded-lg border-2 transition-all cursor-grab active:cursor-grabbing hover:shadow-md ${cfg.bg} ${cfg.border} select-none group`}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center space-x-1.5">
-                                <div className={`p-1 rounded bg-white/80 ${cfg.color}`}>
-                                  <DevIcon size={12} />
-                                </div>
-                                <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${cfg.badge}`}>
-                                  {device.type}
-                                </span>
-                              </div>
-                              <span className="text-[9px] text-gray-400 font-mono flex items-center space-x-1 opacity-60 group-hover:opacity-100">
-                                <Move size={10} />
-                                <span>按住可拖拽</span>
-                              </span>
-                            </div>
-
-                            <div className="font-bold text-xs text-gray-800 truncate" title={device.name}>
-                              {device.name}
-                            </div>
-                            <div className="text-[10px] text-gray-500 font-mono mt-0.5 flex justify-between">
-                              <span>{device.sn}</span>
-                              <span className="opacity-75">{device.model}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <div className="flex items-center gap-5">
+                      <button
+                        type="button"
+                        onClick={() => setDevicePoolTab('pool')}
+                        className={`pb-2 text-xs font-bold border-b-2 -mb-px transition ${
+                          devicePoolTab === 'pool' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-800'
+                        }`}
+                      >
+                        设备池
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDevicePoolTab('tree')}
+                        className={`pb-2 text-xs font-bold border-b-2 -mb-px transition ${
+                          devicePoolTab === 'tree' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent hover:text-gray-800'
+                        }`}
+                      >
+                        站点树
+                      </button>
                     </div>
                   </div>
 
-                  {isDragOverPendingArea && (
-                    <div className="p-2 bg-amber-100 border border-amber-300 rounded text-center text-amber-900 font-bold text-xs animate-bounce mt-2">
+                  {devicePoolTab === 'pool' ? (
+                    /* Tab 1: 设备池（分类筛选 + 设备卡片） */
+                    <div className="flex-1 flex flex-col min-h-0">
+                      <div className="flex flex-wrap gap-1.5 p-2.5 shrink-0">
+                        {DEVICE_POOL_CATEGORIES.map(cat => {
+                          const count = cat === '全部'
+                            ? pendingDevices.length
+                            : pendingDevices.filter(d => (DEVICE_CATEGORY_MAP[d.type] || '配套') === cat).length;
+                          const active = devicePoolFilter === cat;
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => setDevicePoolFilter(cat)}
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition ${
+                                active
+                                  ? 'bg-blue-50 border-blue-400 text-blue-700'
+                                  : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                              }`}
+                            >
+                              {cat} <span className="font-mono opacity-80">{count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex-1 min-h-0 overflow-y-auto px-2.5 pb-2.5 space-y-1.5 custom-scrollbar">
+                        {pendingDevices
+                          .filter(d => devicePoolFilter === '全部' || (DEVICE_CATEGORY_MAP[d.type] || '配套') === devicePoolFilter)
+                          .map(device => {
+                            const st = getDeviceRunStatus(device.id + device.sn);
+                            return (
+                              <div
+                                key={device.id}
+                                data-pool-card="1"
+                                onPointerDown={(e) => startPointerDrag(e, { id: device.id, name: device.name, type: device.type }, 'pending')}
+                                className="p-2 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-xs transition-all cursor-grab active:cursor-grabbing select-none group touch-none"
+                                title={`${device.type} · ${device.model || ''}｜按住拖拽至画布节点组网`}
+                              >
+                                <div className="flex items-center space-x-1.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DEVICE_STATUS_DOT[st]}`} />
+                                  <span className="text-[10px] text-gray-500 truncate">{device.type}</span>
+                                </div>
+                                <div className="text-[9px] text-gray-400 font-mono truncate mt-0.5" title={device.sn}>
+                                  {device.sn}
+                                </div>
+                                <div className="text-xs font-bold text-gray-800 truncate" title={device.name}>
+                                  {device.name}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        {pendingDevices.filter(d => devicePoolFilter === '全部' || (DEVICE_CATEGORY_MAP[d.type] || '配套') === devicePoolFilter).length === 0 && (
+                          <div className="text-center text-[10px] text-gray-400 py-8">该分类下暂无待编辑设备</div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Tab 2: 站点树（当前拓扑层级结构） */
+                    <div className="flex-1 min-h-0 overflow-y-auto p-2.5 custom-scrollbar">
+                      {(() => {
+                        const currentTopoId = activeTopoId || 'T01';
+                        const nodes = topoTrees[currentTopoId] || [];
+                        if (nodes.length === 0) {
+                          return <div className="text-center text-[10px] text-gray-400 py-8">当前拓扑暂无节点</div>;
+                        }
+                        const displayName = (n: any) => (n.type === '总进线' || n.parentId === null) ? '站点Bus' : n.name;
+                        const renderTreeLevel = (parentId: string | null, depth: number): React.ReactNode => {
+                          const children = nodes.filter(n =>
+                            n.parentId === parentId || (parentId === null && n.parentId && !nodes.some(p => p.id === n.parentId))
+                          );
+                          if (children.length === 0 && depth > 0) return null;
+                          return children.map(node => {
+                            const nodeChildren = nodes.filter(n => n.parentId === node.id);
+                            const expanded = treeExpandedIds[node.id] !== false;
+                            const st = getDeviceRunStatus(node.id + (node.sn || ''));
+                            return (
+                              <div key={node.id}>
+                                <div className="flex items-center space-x-1 py-1" style={{ paddingLeft: depth * 14 }}>
+                                  {nodeChildren.length > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setTreeExpandedIds(prev => ({ ...prev, [node.id]: !expanded }))}
+                                      className="p-0.5 text-gray-400 hover:text-gray-700 transition"
+                                    >
+                                      {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                                    </button>
+                                  ) : (
+                                    <span className="w-[15px] shrink-0" />
+                                  )}
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DEVICE_STATUS_DOT[st]}`} />
+                                  <span
+                                    onClick={() => setSelectedNodeId(node.id)}
+                                    className={`text-[11px] truncate cursor-pointer transition ${selectedNodeId === node.id ? 'text-blue-600 font-bold' : 'text-gray-700 hover:text-blue-600'}`}
+                                    title={node.name}
+                                  >
+                                    {displayName(node)}
+                                  </span>
+                                </div>
+                                {expanded && renderTreeLevel(node.id, depth + 1)}
+                              </div>
+                            );
+                          });
+                        };
+                        return renderTreeLevel(null, 0);
+                      })()}
+                    </div>
+                  )}
+
+                  {isOverPool && (
+                    <div className="p-2 bg-amber-100 border border-amber-300 rounded text-center text-amber-900 font-bold text-xs animate-bounce mt-2 shrink-0">
                       ⬇ 松开鼠标，将节点退回至待编辑区
                     </div>
                   )}
@@ -2778,111 +3494,133 @@ export function StationWorkspace({
               )}
 
               {/* Main Center Canvas Area (拓扑图形画布) */}
-              <div className="flex-1 min-w-0 w-full bg-white rounded-xl border border-gray-200 shadow-sm p-5 min-h-[600px] flex flex-col relative overflow-hidden">
+              <div className="flex-1 min-w-0 w-full bg-white rounded-xl border border-gray-200 shadow-sm p-5 min-h-[360px] xl:min-h-0 flex flex-col relative overflow-hidden">
                 
                 {/* Canvas Toolbar Header */}
                 <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100 shrink-0 flex-wrap gap-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-gray-700">拓扑渲染画布</span>
-                    <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono border border-blue-200">
-                      {(topoTrees[activeTopoId || 'T01'] || []).length} 个逻辑节点
-                    </span>
-                    {(isPendingCollapsed || pendingDevices.length === 0) && (
-                      <button
-                        type="button"
-                        onClick={() => setIsPendingCollapsed(false)}
-                        className="text-[10px] bg-amber-50 hover:bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-200 font-bold transition flex items-center space-x-1 ml-2"
-                        title="展开待编辑设备区"
-                      >
-                        <Box size={11} />
-                        <span>待编辑设备 ({pendingDevices.length})</span>
-                      </button>
-                    )}
-                  </div>
+                  <div className="flex items-center flex-wrap gap-2">
+                    {/* 收起左侧设备池 */}
+                    <button
+                      type="button"
+                      onClick={() => setIsPendingCollapsed(true)}
+                      className="p-1.5 hover:bg-gray-100 text-gray-500 hover:text-gray-800 rounded-lg border border-gray-200 transition"
+                      title="收起左侧设备池"
+                    >
+                      <ChevronsLeft size={14} />
+                    </button>
 
-                  <div className="flex items-center space-x-3">
-                    {/* Canvas Zoom Controls */}
-                    <div className="flex items-center space-x-1 bg-gray-50 p-1 rounded-lg border border-gray-200 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setCanvasScale(s => Math.max(0.4, Number((s - 0.1).toFixed(1))))}
-                        disabled={canvasScale <= 0.4}
-                        className="p-1 hover:bg-white hover:text-blue-600 rounded text-gray-600 disabled:opacity-40 transition"
-                        title="缩小画布 (-10%)"
-                      >
-                        <ZoomOut size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCanvasScale(1)}
-                        className="px-2 py-0.5 hover:bg-white text-gray-700 font-mono font-bold text-[11px] rounded transition"
-                        title="点击重置为 100% 缩放"
-                      >
-                        {Math.round(canvasScale * 100)}%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCanvasScale(s => Math.min(2.0, Number((s + 0.1).toFixed(1))))}
-                        disabled={canvasScale >= 2.0}
-                        className="p-1 hover:bg-white hover:text-blue-600 rounded text-gray-600 disabled:opacity-40 transition"
-                        title="放大画布 (+10%)"
-                      >
-                        <ZoomIn size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCanvasScale(1)}
-                        className="p-1 hover:bg-white text-gray-500 hover:text-gray-800 rounded transition border-l border-gray-200 pl-1.5"
-                        title="重置缩放"
-                      >
-                        <RotateCcw size={12} />
-                      </button>
-                    </div>
-
-                    {/* Layout Mode Switcher */}
-                    <div className="flex items-center space-x-1 bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                    {/* 纵向 / 横向 布局切换 */}
+                    <div className="flex items-center bg-gray-100 rounded-lg p-0.5 border border-gray-200">
                       <button
                         type="button"
                         onClick={() => setTreeLayoutMode('vertical')}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center space-x-1 ${
-                          treeLayoutMode === 'vertical' ? 'bg-white text-blue-600 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition ${
+                          treeLayoutMode === 'vertical' ? 'bg-blue-600 text-white shadow-xs' : 'text-gray-500 hover:text-gray-900'
                         }`}
                         title="纵向树形拓扑结构"
                       >
-                        <span>纵向树 ↕</span>
+                        纵向
                       </button>
                       <button
                         type="button"
                         onClick={() => setTreeLayoutMode('horizontal')}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center space-x-1 ${
-                          treeLayoutMode === 'horizontal' ? 'bg-white text-blue-600 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition ${
+                          treeLayoutMode === 'horizontal' ? 'bg-blue-600 text-white shadow-xs' : 'text-gray-500 hover:text-gray-900'
                         }`}
                         title="横向树形拓扑结构"
                       >
-                        <span>横向树 ↔</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTreeLayoutMode('singleline')}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center space-x-1 ${
-                          treeLayoutMode === 'singleline' ? 'bg-white text-blue-600 shadow-xs' : 'text-gray-500 hover:text-gray-900'
-                        }`}
-                        title="单线电气一次接线图"
-                      >
-                        <span>单线电气图 ⚡</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTreeLayoutMode('matrix')}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-md transition flex items-center space-x-1 ${
-                          treeLayoutMode === 'matrix' ? 'bg-white text-blue-600 shadow-xs' : 'text-gray-500 hover:text-gray-900'
-                        }`}
-                        title="设备节点与通信矩阵"
-                      >
-                        <span>设备矩阵 ⊞</span>
+                        横向
                       </button>
                     </div>
+
+                    {/* 运行状态图例 */}
+                    <div className="flex items-center space-x-2.5 pl-1 text-[10px] text-gray-600">
+                      <span className="font-bold text-gray-500">运行状态</span>
+                      <span className="flex items-center space-x-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /><span>正常</span></span>
+                      <span className="flex items-center space-x-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /><span>故障</span></span>
+                      <span className="flex items-center space-x-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-300" /><span>离线</span></span>
+                    </div>
+
+                    {/* 当前拓扑 ID（同步本地拓扑时按此 ID 匹配） */}
+                    <span className="text-[9px] bg-blue-600 text-white font-mono font-bold px-1.5 py-0.5 rounded" title="当前拓扑 ID（同步本地拓扑时按此 ID 匹配）">
+                      {activeTopoId || stationTopologies[0]?.id}
+                    </span>
                   </div>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isTopologyEditMode) {
+                          setIsTopologyEditMode(false);
+                          setDragOverNodeId(null);
+                          setTopoDeploymentStatus(prev => ({
+                            ...prev,
+                            [activeTopoId || 'T01']: {
+                              ...(prev[activeTopoId || 'T01'] || {}),
+                              status: 'modified'
+                            }
+                          }));
+                        }
+                        showNotification('拓扑配置已保存，连线关系已本地暂存！');
+                      }}
+                      className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-sm transition"
+                    >
+                      保存
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isTopologyEditMode) {
+                          setIsTopologyEditMode(false);
+                          setDragOverNodeId(null);
+                        }
+                        setSelectedNodeId(null);
+                        showNotification('已取消本次拓扑编辑操作。');
+                      }}
+                      className="px-4 py-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-600 font-bold text-xs rounded-lg transition"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+
+                {/* 右侧悬浮缩放控制 */}
+                <div className="absolute right-3 bottom-20 z-20 flex flex-col items-center space-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCanvasScale(1)}
+                    className="min-w-[34px] text-[10px] font-mono font-bold text-gray-600 bg-white border border-gray-200 rounded-lg px-1.5 py-1 shadow-xs hover:text-blue-600 transition"
+                    title="重置为 100%"
+                  >
+                    {Math.round(canvasScale * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCanvasScale(s => Math.min(2.0, Number((s + 0.1).toFixed(1))))}
+                    disabled={canvasScale >= 2.0}
+                    className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 shadow-xs transition disabled:opacity-40"
+                    title="放大画布 (+10%)"
+                  >
+                    <ZoomIn size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCanvasScale(s => Math.max(0.4, Number((s - 0.1).toFixed(1))))}
+                    disabled={canvasScale <= 0.4}
+                    className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 shadow-xs transition disabled:opacity-40"
+                    title="缩小画布 (-10%)"
+                  >
+                    <ZoomOut size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCanvasScale(1); setCanvasPan({ x: 0, y: 0 }); }}
+                    className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 shadow-xs transition"
+                    title="重置视图（缩放 100% + 复位平移）"
+                  >
+                    <Maximize2 size={12} />
+                  </button>
                 </div>
 
                 {isTopologyEditMode && (
@@ -2894,8 +3632,42 @@ export function StationWorkspace({
                   </div>
                 )}
 
-                {/* Tree Canvas Render Area */}
-                <div ref={canvasContainerRef} className="flex-1 overflow-auto p-4 border border-dashed border-gray-200 rounded-xl bg-gray-50/40 custom-scrollbar flex items-center justify-center min-h-[460px] relative">
+                {/* Tree Canvas Render Area —— 空白处按下可平移画布 */}
+                <div
+                  ref={canvasContainerRef}
+                  onPointerDown={handleCanvasPointerDown}
+                  className={`flex-1 min-h-0 overflow-hidden p-4 border border-dashed border-gray-200 rounded-xl bg-gray-50/40 relative flex items-start justify-center ${
+                    isPanning ? 'cursor-grabbing' : 'cursor-grab'
+                  }`}
+                >
+                  {/* 平移提示（未平移过时显示） */}
+                  {!isPanning && canvasPan.x === 0 && canvasPan.y === 0 && (
+                    <div className="absolute right-3 top-3 z-10 text-[10px] text-gray-400 bg-white/80 border border-gray-200 rounded-full px-2 py-0.5 pointer-events-none select-none">
+                      拖动空白处平移画布 · 滚轮缩放
+                    </div>
+                  )}
+
+                  {/* 拖拽跟随幽灵 */}
+                  {dragItem && dragPos && (
+                    <div
+                      className="fixed z-[999] pointer-events-none -translate-x-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg bg-white/95 border-2 border-blue-400 shadow-2xl text-[11px] font-bold text-gray-800 whitespace-nowrap flex items-center space-x-1.5"
+                      style={{ left: dragPos.x, top: dragPos.y }}
+                    >
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">{dragItem.type}</span>
+                      <span>{dragItem.name}</span>
+                      <span className="text-[9px] text-gray-400 font-normal">
+                        {isOverPool
+                          ? (dragItem.source === 'meter' ? '松开放回设备池（解绑电表）' : '松开放回设备池')
+                          : dragOverMeterId
+                            ? '松开：加入该电表的计量组（须同层）'
+                            : dragItem.source === 'pending'
+                              ? '拖到节点上挂载'
+                              : dragItem.source === 'meter'
+                                ? '拖到设备上改挂 · 拖到池中解绑'
+                                : '拖到目标设备上'}
+                      </span>
+                    </div>
+                  )}
                   
                   {/* VIEW MODE 1: SINGLE-LINE ELECTRICAL DIAGRAM */}
                   {treeLayoutMode === 'singleline' && (
@@ -3082,11 +3854,27 @@ export function StationWorkspace({
                                     {node.model || 'STD-MODEL'}
                                   </td>
                                   <td className="px-4 py-2.5">
-                                    {node.meterBinding ? (
-                                      <span className="text-[10px] text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded font-bold flex items-center space-x-1 w-fit">
-                                        <Gauge size={11} className="text-orange-600" />
-                                        <span>{node.meterBinding.name} ({node.meterBinding.sn})</span>
-                                      </span>
+                                    {metersRelatedTo(activeTopoId || 'T01', node.id).length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {metersRelatedTo(activeTopoId || 'T01', node.id).map(ml => {
+                                          const memberCount = ml.targetNodeIds.length;
+                                          return (
+                                            <span
+                                              key={ml.id}
+                                              title={memberCount > 1
+                                                ? `「${ml.name}」的计量组覆盖同层 ${memberCount} 台设备，此设备是其中之一（虚线框内）`
+                                                : `「${ml.name}」单独计量此设备`}
+                                              className="text-[10px] px-2 py-0.5 rounded font-bold flex items-center space-x-1 w-fit border text-orange-700 bg-orange-50 border-orange-200"
+                                            >
+                                              <Gauge size={11} className="text-orange-600" />
+                                              <span>{ml.name} ({ml.sn})</span>
+                                              {memberCount > 1 && (
+                                                <span className="text-[9px] px-1 rounded bg-orange-500 text-white">组内{memberCount}台</span>
+                                              )}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
                                     ) : (
                                       <span className="text-[10px] text-gray-400">未绑定计量电表</span>
                                     )}
@@ -3109,8 +3897,9 @@ export function StationWorkspace({
                   {/* VIEW MODE 3 & 4: TREE CANVAS (VERTICAL / HORIZONTAL) */}
                   {(treeLayoutMode === 'vertical' || treeLayoutMode === 'horizontal') && (
                   <div 
-                    className="transition-transform duration-150 origin-top flex items-center justify-center p-4 min-w-full"
-                    style={{ transform: `scale(${canvasScale})`, transformOrigin: 'top center' }}
+                    data-tree-content
+                    className="relative origin-top flex items-center justify-center p-4 min-w-full"
+                    style={{ transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${canvasScale})`, transformOrigin: 'top center' }}
                   >
                     {(() => {
                       const currentTopoId = activeTopoId || 'T01';
@@ -3148,176 +3937,164 @@ export function StationWorkspace({
                         const children = currentNodes.filter(n => n.parentId === nodeId);
                         const parentNode = currentNodes.find(n => n.id === node.parentId);
                         const cfg = DEVICE_TYPE_CONFIG[node.type] || DEVICE_TYPE_CONFIG['变压器'];
-                        const IconComp = cfg.icon;
                         const isSelected = selectedNodeId === node.id;
                         const isDragOver = dragOverNodeId === node.id;
                         const isRoot = node.type === '总进线' || node.parentId === null;
+                        // 该设备相关的电表（把它算作计量组成员）——用于悬浮气泡里的说明
+                        const relatedMeters = metersRelatedTo(currentTopoId, node.id);
+                        // 常显：该设备属于某个计量组（虚线框里但没被计量的设备不会有这个描边）
+                        const inMeterGroup = meterMemberIds(currentTopoId).has(node.id);
+                        // hover 高亮：该设备是当前悬停电表计量组里的成员（同层设备，不含父节点）
+                        const highlightedByMeter = meterHighlightIds(currentTopoId, hoveredMeterSn).has(node.id);
 
                         return (
                           <div key={node.id} className={`flex ${treeLayoutMode === 'vertical' ? 'flex-col items-center' : 'flex-row items-center'} relative shrink-0`}>
                             {/* Node Card Container with Hover Popover */}
                             <div className="relative group/node">
+                              {/* 电表引出线以 group/node 为定位参照（该容器与卡片同宽同高） */}
                               <div
-                                draggable={!isRoot && isTopologyEditMode}
-                                onDragStart={(e) => isTopologyEditMode && handleDragStart(e, { id: node.id, name: node.name, type: node.type }, 'canvas')}
-                                onDragOver={(e) => {
-                                  e.preventDefault();
-                                  if (isTopologyEditMode && dragOverNodeId !== node.id) setDragOverNodeId(node.id);
+                                data-node-id={node.id}
+                                onPointerDown={(e) => {
+                                  if (isRoot) return;
+                                  if ((e.target as HTMLElement).closest('button')) return; // 点删除等按钮不触发拖拽
+                                  startPointerDrag(e, { id: node.id, name: node.name, type: node.type }, 'canvas');
                                 }}
-                                onDragLeave={() => isTopologyEditMode && setDragOverNodeId(null)}
-                                onDrop={(e) => isTopologyEditMode && handleDropOnNode(e, node.id)}
                                 onClick={() => setSelectedNodeId(node.id)}
-                                className={`relative p-3 rounded-xl border-2 transition-all duration-200 cursor-pointer select-none shadow-xs w-44 ${
-                                  cfg.bg
-                                } ${cfg.border} ${
-                                  isSelected ? 'ring-2 ring-offset-2 ring-blue-500 scale-105 z-10 shadow-md' : 'hover:scale-102 hover:shadow-md'
+                                onMouseEnter={() => setHoveredNodeId(node.id)}
+                                onMouseLeave={() => setHoveredNodeId(null)}
+                                className={`transition-all duration-200 cursor-pointer select-none touch-none ${
+                                  isRoot
+                                    ? 'px-4 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200'
+                                    : 'p-2.5 rounded-lg border bg-white border-gray-200 w-40 shadow-xs'
                                 } ${
+                                  isSelected ? 'ring-2 ring-offset-2 ring-blue-500 z-10 shadow-md' : 'hover:shadow-md'
+                                } ${
+                                  inMeterGroup ? 'border-orange-300' : ''
+                                } ${
+                                  highlightedByMeter ? 'ring-2 ring-orange-400 border-orange-400 bg-orange-50/60' : ''
+                               } ${
                                   isDragOver ? 'ring-4 ring-emerald-500 bg-emerald-100 scale-105 shadow-xl border-emerald-400 animate-pulse' : ''
                                 }`}
                               >
                                 {isDragOver && (
                                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-md z-20 whitespace-nowrap">
-                                    {draggedItem?.type === '电表' ? '🎯 松开建立【测量关系】关联电表' : '🎯 松开自动吸附挂载至此节点'}
+                                    {dragItem?.type === '电表'
+                                      ? (isRoot ? '🎯 松开：电表贴到该节点下全部设备' : '🎯 松开：电表贴到该设备边上')
+                                      : '🎯 松开：挂载到该设备下'}
                                   </div>
                                 )}
 
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="flex items-center space-x-1">
-                                    <div className={`p-1 rounded bg-white/90 shadow-2xs ${cfg.color}`}>
-                                      <IconComp size={13} />
-                                    </div>
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${cfg.badge}`}>
-                                      {node.type}
-                                    </span>
+                                {isRoot ? (
+                                  /* 根节点：站点Bus 胶囊样式 */
+                                  <div className="flex items-center space-x-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                    <span className="text-xs font-bold text-emerald-800" title={node.name}>站点Bus</span>
                                   </div>
-
-                                  <div className="flex items-center space-x-1">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500" title="正常上报" />
-                                    {isTopologyEditMode && !isRoot && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleRemoveNodeToPending(node.id);
-                                        }}
-                                        className="p-1 hover:bg-red-100 text-red-600 rounded transition"
-                                        title="退回待编辑设备区"
-                                      >
-                                        <Trash2 size={12} />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="font-bold text-xs text-gray-900 truncate" title={node.name}>
-                                  {node.name}
-                                </div>
-                                <div className="text-[10px] text-gray-500 font-mono mt-0.5 truncate flex justify-between">
-                                  <span>{node.sn || `SN-${node.id}`}</span>
-                                  {children.length > 0 && (
-                                    <span className="text-blue-600 font-bold bg-blue-50 px-1 rounded text-[9px]">
-                                      {children.length}下级
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Bound Measurement Relation (Meter) badge */}
-                                {node.meterBinding && (
-                                  <div className="mt-2 pt-1 border-t border-dashed border-orange-200 flex flex-col space-y-0.5 bg-orange-50/90 p-1.5 rounded-lg border border-orange-200 text-[10px] text-orange-900 shadow-2xs">
-                                    <div className="flex items-center justify-between font-bold">
-                                      <span className="flex items-center space-x-1 text-orange-700 truncate max-w-[105px]" title={node.meterBinding.name}>
-                                        <Gauge size={11} className="shrink-0 text-orange-600" />
-                                        <span className="truncate">{node.meterBinding.name}</span>
-                                      </span>
+                                ) : (
+                                  <>
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center space-x-1.5 min-w-0">
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DEVICE_STATUS_DOT[getDeviceRunStatus(node.id + (node.sn || ''))]}`} />
+                                        <span className="text-[10px] text-gray-500 truncate">{node.type}</span>
+                                      </div>
                                       {isTopologyEditMode && (
                                         <button
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleUnbindMeter(node.id);
+                                            handleRemoveNodeToPending(node.id);
                                           }}
-                                          className="text-[9px] text-red-600 hover:bg-red-100 px-1 py-0.2 rounded font-medium ml-1 transition"
-                                          title="解绑测量电表"
+                                          className="p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition shrink-0"
+                                          title="退回设备池（该设备下全部子设备一并退回）"
                                         >
-                                          解绑
+                                          <Trash2 size={12} />
                                         </button>
                                       )}
                                     </div>
-                                    <div className="text-[9px] text-orange-600 font-mono flex justify-between items-center">
-                                      <span className="truncate">{node.meterBinding.sn}</span>
-                                      <span className="text-[8px] bg-orange-100 text-orange-800 px-1 rounded shrink-0 font-sans">测量节点</span>
+                                    <div className="text-[9px] text-gray-400 font-mono truncate mt-1" title={node.sn || `SN-${node.id}`}>
+                                      设备ID {node.sn || `SN-${node.id}`}
                                     </div>
-                                  </div>
+                                    <div className="text-xs font-bold text-gray-900 truncate" title={node.name}>
+                                      {node.name}
+                                    </div>
+                                  </>
                                 )}
                               </div>
 
-                              {/* Hover Floating Details Popover Tooltip */}
-                              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2.5 hidden group-hover/node:block w-64 bg-white rounded-xl shadow-2xl border border-gray-200 p-3.5 text-xs text-gray-700 z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-150">
-                                <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-2">
-                                  <div className="flex items-center space-x-1.5">
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${cfg.badge}`}>
-                                      {node.type}
-                                    </span>
-                                    <span className="font-bold text-gray-900 text-xs truncate max-w-[120px]">{node.name}</span>
-                                  </div>
-                                  <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded font-bold border border-emerald-200">
-                                    通讯正常
-                                  </span>
-                                </div>
-
+                              {/* Hover 悬浮信息：只报 4 项 —— 设备名称 / SN / 设备类型 / 关联电表 */}
+                              <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2.5 ${dragItem ? 'hidden' : 'hidden group-hover/node:block'} w-56 bg-white rounded-xl shadow-2xl border border-gray-200 p-3 text-xs text-gray-700 z-50 animate-in fade-in zoom-in-95 duration-150`}>
                                 <div className="space-y-1.5 text-[11px]">
                                   <div className="flex justify-between py-0.5 border-b border-gray-50">
-                                    <span className="text-gray-400">设备序列号:</span>
-                                    <span className="font-mono text-gray-800">{node.sn || `SN-${node.id}`}</span>
+                                    <span className="text-gray-400 shrink-0">设备名称:</span>
+                                    <span className="font-bold text-gray-900 truncate ml-2">{node.name}</span>
                                   </div>
                                   <div className="flex justify-between py-0.5 border-b border-gray-50">
-                                    <span className="text-gray-400">设备规格型号:</span>
-                                    <span className="font-mono text-gray-800">{node.model || '通用标准款'}</span>
+                                    <span className="text-gray-400 shrink-0">SN:</span>
+                                    <span className="font-mono text-gray-800 truncate ml-2">{node.sn || `SN-${node.id}`}</span>
                                   </div>
                                   <div className="flex justify-between py-0.5 border-b border-gray-50">
-                                    <span className="text-gray-400">上级挂载节点:</span>
-                                    <span className="font-medium text-gray-800 truncate max-w-[120px]">
-                                      {parentNode ? parentNode.name : '无 (根进线节点)'}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between py-0.5 border-b border-gray-50">
-                                    <span className="text-gray-400">测量关联电表:</span>
-                                    <span className={`font-medium truncate max-w-[120px] ${node.meterBinding ? 'text-orange-600 font-bold' : 'text-gray-400'}`}>
-                                      {node.meterBinding ? `${node.meterBinding.name}` : '未绑定测量关系'}
-                                    </span>
+                                    <span className="text-gray-400 shrink-0">设备类型:</span>
+                                    <span className="font-medium text-gray-800 truncate ml-2">{node.type}</span>
                                   </div>
                                   <div className="flex justify-between py-0.5">
-                                    <span className="text-gray-400">直接下级设备:</span>
-                                    <span className="font-bold text-blue-600">{children.length} 台</span>
+                                    <span className="text-gray-400 shrink-0">关联电表:</span>
+                                    <span
+                                      className={`ml-2 truncate ${relatedMeters.length > 0 ? 'text-orange-600 font-bold' : 'text-gray-400'}`}
+                                      title={relatedMeters.length > 0 ? relatedMeters.map(ml => `${ml.name}（${ml.sn}）`).join(' / ') : '未绑定计量关系'}
+                                    >
+                                      {relatedMeters.length > 0 ? relatedMeters.map(ml => ml.sn).join(' / ') : '无'}
+                                    </span>
                                   </div>
                                 </div>
-
-                                {isTopologyEditMode && !isRoot && (
-                                  <div className="mt-2 pt-1.5 border-t border-gray-100 text-[10px] text-amber-600 flex items-center justify-between">
-                                    <span>💡 拖拽或右上角按键退回待编辑区</span>
-                                  </div>
-                                )}
 
                                 {/* Arrow down */}
                                 <div className="absolute top-full left-1/2 -translate-x-1/2 border-6 border-transparent border-t-white drop-shadow-xs" />
                               </div>
                             </div>
 
-                            {/* Children branch connector */}
+                            {/* Children branch connector —— 连线接到每个设备顶部居中 */}
                             {children.length > 0 && (
-                              <div className={`flex ${treeLayoutMode === 'vertical' ? 'flex-col items-center' : 'flex-row items-center'}`}>
-                                {/* Connector segment from parent */}
-                                <div className={`bg-gray-300 ${treeLayoutMode === 'vertical' ? 'w-0.5 h-6' : 'h-0.5 w-6'}`} />
-
-                                {/* Children container with connecting line */}
-                                <div className={`flex ${
-                                  treeLayoutMode === 'vertical'
-                                    ? 'flex-row items-start space-x-6 pt-2 border-t-2 border-gray-300'
-                                    : 'flex-col items-start space-y-6 pl-2 border-l-2 border-gray-300'
-                                }`}>
-                                  {children.map(child => renderNodeTree(child.id))}
+                              treeLayoutMode === 'vertical' ? (
+                                <div className="flex flex-col items-center">
+                                  {/* 父节点底部居中引出 */}
+                                  <div data-connector className="w-0.5 h-5 bg-gray-300" />
+                                  {/* 子设备组：横线精确落到各设备中心，再竖直下探到设备顶部 */}
+                                  <div className="flex flex-row items-start">
+                                    {children.map((child, idx) => (
+                                      <div key={child.id} className="relative flex flex-col items-center px-4">
+                                        {children.length > 1 && (
+                                          <div
+                                            data-connector className="absolute top-0 h-0.5 bg-gray-300"
+                                            style={{ left: idx === 0 ? '50%' : 0, right: idx === children.length - 1 ? '50%' : 0 }}
+                                          />
+                                        )}
+                                        <div data-connector className="w-0.5 h-3 bg-gray-300 relative z-10" />
+                                        {renderNodeTree(child.id)}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                <div className="flex flex-row items-center">
+                                  {/* 父节点右侧居中引出 */}
+                                  <div data-connector className="h-0.5 w-5 bg-gray-300" />
+                                  {/* 子设备组：竖线精确落到各设备中心，再水平连到设备左侧 */}
+                                  <div className="flex flex-col items-start">
+                                    {children.map((child, idx) => (
+                                      <div key={child.id} className="relative flex flex-row items-center py-3">
+                                        {children.length > 1 && (
+                                          <div
+                                            data-connector className="absolute left-0 w-0.5 bg-gray-300"
+                                            style={{ top: idx === 0 ? '50%' : 0, bottom: idx === children.length - 1 ? '50%' : 0 }}
+                                          />
+                                        )}
+                                        <div data-connector className="h-0.5 w-3 bg-gray-300 relative z-10" />
+                                        {renderNodeTree(child.id)}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
                             )}
                           </div>
                         );
@@ -3325,6 +4102,165 @@ export function StationWorkspace({
 
                       return renderNodeTree(rootNode.id);
                     })()}
+                  {/* 计量组覆盖层：虚线框 + 挂在框边上的电表胶囊（不隶属任何单台设备，故无歧义） */}
+                  {/* 悬停设备卡、弹出详情气泡时让位到下一层，保证气泡里的按钮能点到 */}
+                  <div className={`absolute inset-0 pointer-events-none ${hoveredNodeId ? '-z-10' : 'z-20'}`}>
+                    {(() => {
+                      const ovTopoId = activeTopoId || 'T01';
+                      const ovNodes = topoTrees[ovTopoId] || DEFAULT_TOPOLOGY_NODES_MAP[ovTopoId] || [];
+                      return (meterLinks[ovTopoId] || []).map(ml => {
+                        const box = meterBoxMap[ml.id];
+                        if (!box) return null;
+                        const hl = hoveredMeterSn === ml.sn;
+                        const isGroupDropTarget = dragOverMeterId === ml.id;
+                        const isPanelOpen = openMeterPanelId === ml.id;
+                        const measureCount = ml.targetNodeIds.length;
+                        const horizSide = box.side === 'right' || box.side === 'left';
+                        const chipPosCls =
+                          box.side === 'right' ? 'left-full top-1/2 -translate-y-1/2 flex flex-row items-center'
+                            : box.side === 'left' ? 'right-full top-1/2 -translate-y-1/2 flex flex-row-reverse items-center'
+                              : box.side === 'top' ? 'left-1/2 -translate-x-1/2 bottom-full flex flex-col-reverse items-center'
+                                : 'left-1/2 -translate-x-1/2 top-full flex flex-col items-center';
+                        return (
+                          <div key={ml.id} className="absolute" style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
+                            {/* 计量组虚线框：普通状态常显，框住被计量的同层设备 */}
+                            {box.multi && (
+                              <div className={`absolute inset-0 rounded-xl border-2 border-dashed transition-all ${
+                                isGroupDropTarget
+                                  ? 'border-emerald-500 bg-emerald-200/15'
+                                  : hl
+                                    ? 'border-orange-500 bg-orange-300/15'
+                                    : 'border-orange-400/60 bg-orange-200/10'
+                              }`} />
+                            )}
+
+                            {/* 从框边引出的电表胶囊：框边先落一个「计量点」，再引出到胶囊 */}
+                            <div className={`absolute ${chipPosCls}`}>
+                              <span className={`w-2 h-2 rounded-full shrink-0 pointer-events-none ${hl ? 'bg-orange-500' : 'bg-orange-400'}`} />
+                              <div className={`shrink-0 ${horizSide ? 'h-0.5 w-3' : 'w-0.5 h-2'} ${hl ? 'bg-orange-500' : 'bg-orange-300'}`} />
+                              <div
+                                data-meter-chip={ml.id}
+                                data-drop-meter={ml.id}
+                                data-meter-count={measureCount}
+                                onPointerDown={(e) => {
+                                  if ((e.target as HTMLElement).closest('button')) return;
+                                  startPointerDrag(e, { id: ml.id, name: ml.name, type: '电表' }, 'meter');
+                                }}
+                                onMouseEnter={(e) => { e.stopPropagation(); setHoveredMeterSn(ml.sn); }}
+                                onMouseLeave={() => setHoveredMeterSn(null)}
+                                className={`group/meter relative pointer-events-auto flex items-center space-x-1 pl-1 pr-1.5 py-0.5 rounded-md border bg-orange-50 whitespace-nowrap shadow-xs transition-all cursor-grab active:cursor-grabbing touch-none ${
+                                  isGroupDropTarget
+                                    ? 'border-emerald-500 ring-4 ring-emerald-300 bg-emerald-50 scale-110'
+                                    : isPanelOpen
+                                      ? 'border-orange-500 ring-2 ring-orange-300 bg-orange-100'
+                                      : hl
+                                        ? 'border-orange-500 ring-2 ring-orange-300 bg-orange-100 scale-105'
+                                        : 'border-orange-200 hover:border-orange-400'
+                                }`}
+                              >
+                                {/* Hover 悬浮信息：只报 4 项 —— 设备名称 / SN / 设备类型 / 关联电表 */}
+                                <div className={`absolute left-1/2 -translate-x-1/2 ${box.side === 'top' ? 'top-full mt-2' : 'bottom-full mb-2'} ${dragItem ? 'hidden' : 'hidden group-hover/meter:block'} w-48 bg-white rounded-xl shadow-2xl border border-gray-200 p-3 text-xs text-gray-700 z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-150`}>
+                                  <div className="space-y-1.5 text-[11px]">
+                                    <div className="flex justify-between py-0.5 border-b border-gray-50">
+                                      <span className="text-gray-400 shrink-0">设备名称:</span>
+                                      <span className="font-bold text-gray-900 truncate ml-2">{ml.name}</span>
+                                    </div>
+                                    <div className="flex justify-between py-0.5 border-b border-gray-50">
+                                      <span className="text-gray-400 shrink-0">SN:</span>
+                                      <span className="font-mono text-gray-800 truncate ml-2">{ml.sn}</span>
+                                    </div>
+                                    <div className="flex justify-between py-0.5 border-b border-gray-50">
+                                      <span className="text-gray-400 shrink-0">设备类型:</span>
+                                      <span className="font-medium text-gray-800 truncate ml-2">电表</span>
+                                    </div>
+                                    <div className="flex justify-between py-0.5">
+                                      <span className="text-gray-400 shrink-0">关联电表:</span>
+                                      <span className="ml-2 font-bold text-orange-600 truncate">自身</span>
+                                    </div>
+                                  </div>
+                                  <div className={`absolute left-1/2 -translate-x-1/2 border-6 border-transparent ${box.side === 'top' ? 'bottom-full border-b-white' : 'top-full border-t-white'} drop-shadow-xs`} />
+                                </div>
+                                <Gauge size={10} className="text-orange-600 shrink-0" />
+                                <span className="text-[9px] font-bold text-orange-800 font-mono">{ml.sn}</span>
+                                {measureCount > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (openMeterPanelId === ml.id) {
+                                        setOpenMeterPanelId(null);
+                                        flushMeterCompact();
+                                        return;
+                                      }
+                                      // 下方/右侧空间不够就翻到上方 / 右对齐，别被画布容器裁掉
+                                      const chipEl = (e.currentTarget as HTMLElement).closest('[data-meter-chip]') as HTMLElement | null;
+                                      const cr = canvasContainerRef.current?.getBoundingClientRect();
+                                      if (chipEl && cr) {
+                                        const r = chipEl.getBoundingClientRect();
+                                        setOpenMeterPanelUp(cr.bottom - r.bottom < 200);
+                                        setOpenMeterPanelAlignRight(r.left + 224 > cr.right);
+                                      }
+                                      setOpenMeterPanelId(ml.id);
+                                    }}
+                                    className="text-[8px] font-bold px-1 rounded bg-orange-500 hover:bg-orange-600 text-white leading-3 transition"
+                                    title="查看 / 调整计量范围（可逐台移出）"
+                                  >
+                                    测{measureCount}台
+                                  </button>
+                                )}
+                                {isTopologyEditMode && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleUnbindMeterLink(ml.id); }}
+                                    className="ml-0.5 text-[10px] leading-none text-red-500 hover:text-red-700 hover:bg-red-100 rounded px-0.5 transition"
+                                    title="解绑：整块电表退回设备池"
+                                  >
+                                    ×
+                                  </button>
+                                )}
+
+                                {/* 计量范围面板：列出同层成员，可逐台移出 */}
+                                {openMeterPanelId === ml.id && (
+                                  <div
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    className={`absolute ${openMeterPanelUp ? 'bottom-full mb-1' : 'top-full mt-1'} ${openMeterPanelAlignRight ? 'right-0' : 'left-0'} z-50 w-56 bg-white rounded-lg border border-orange-200 shadow-xl p-2 text-left whitespace-normal cursor-default`}
+                                  >
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-[9px] font-bold text-gray-500">计量范围（同一层级）</span>
+                                      <span className="text-[9px] font-bold text-orange-600">共 {measureCount} 台</span>
+                                    </div>
+                                    <div className="space-y-0.5 max-h-40 overflow-auto">
+                                      {ml.targetNodeIds.map(id => {
+                                        const member = ovNodes.find(n => n.id === id);
+                                        return (
+                                          <div key={id} className="flex items-center justify-between px-1.5 py-1 rounded hover:bg-orange-50">
+                                            <span className="text-[10px] text-gray-700 truncate" title={member ? member.name : id}>
+                                              {member ? `${member.type} · ${member.name}` : id}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => { e.stopPropagation(); handleRemoveMeterMember(ml.id, id); }}
+                                              className="ml-2 shrink-0 text-[11px] leading-none text-red-500 hover:text-red-700 hover:bg-red-50 rounded px-1 transition"
+                                              title="移出计量组"
+                                            >
+                                              ×
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    <div className="mt-1.5 pt-1.5 border-t border-gray-100 text-[9px] text-gray-400">
+                                      把同层级设备拖到这块电表上即可加组
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
                   </div>
                   )}
                 </div>
@@ -4507,11 +5443,17 @@ export function StationWorkspace({
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-gray-500">当前运行:</span>
-                    <span className="font-bold text-gray-800">{currentTopo?.name || '-'}</span>
+                    <span className="font-bold text-gray-800 flex items-center space-x-1.5">
+                      {currentTopo && <span className="text-[9px] bg-gray-600 text-white font-mono font-bold px-1.5 py-0.2 rounded">{currentTopo.id}</span>}
+                      <span>{currentTopo?.name || '-'}</span>
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-500">切换为:</span>
-                    <span className="font-bold text-blue-700">{targetTopo.name}</span>
+                    <span className="font-bold text-blue-700 flex items-center space-x-1.5">
+                      <span className="text-[9px] bg-blue-600 text-white font-mono font-bold px-1.5 py-0.2 rounded">{targetTopo.id}</span>
+                      <span>{targetTopo.name}</span>
+                    </span>
                   </div>
                 </div>
 

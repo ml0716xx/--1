@@ -570,9 +570,10 @@ export function TopologyDispatchModal({
                             <div className={`w-4 h-4 rounded flex items-center justify-center border ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 bg-white'}`}>
                               {isChecked && <Check size={11} />}
                             </div>
-                            <div>
+                            <div className="flex items-center space-x-1.5">
+                              <span className="text-[9px] bg-blue-600 text-white font-mono font-bold px-1.5 py-0.2 rounded" title="拓扑 ID">{t.id}</span>
                               <span className="text-xs">{t.name}</span>
-                              {isCurrent && <span className="ml-1.5 text-[9px] bg-emerald-100 text-emerald-800 font-normal px-1 rounded">当前方案</span>}
+                              {isCurrent && <span className="text-[9px] bg-emerald-100 text-emerald-800 font-normal px-1 rounded">当前方案</span>}
                             </div>
                           </div>
 
