@@ -339,7 +339,7 @@ export function GridWorkspaceContainer({
           const label = tab === 'enterprise' ? '企业管理' : 
                         tab === 'site' ? '站点管理' : 
                         tab === 'device' ? '设备管理' : 
-                        tab === 'device-apply' ? '本地新建设备申请' : '拓扑管理';
+                        tab === 'device-apply' ? '本地新建设备申请' : '拓扑维护';
           return (
             <div
               key={tab}
@@ -1085,7 +1085,7 @@ function SiteTab({
           <div className="relative bg-white rounded-lg shadow-2xl w-[480px] p-6 text-xs text-gray-700 z-10 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
               <div>
-                <h3 className="text-sm font-bold text-gray-900">管理拓扑图</h3>
+                <h3 className="text-sm font-bold text-gray-900">管理拓扑方案</h3>
                 <p className="text-[10px] text-gray-400 mt-0.5">站点：{topoModalStation.name}</p>
               </div>
               <button onClick={() => setTopoModalStation(null)} className="p-1 hover:bg-gray-100 rounded text-gray-400"><X size={14} /></button>
@@ -1093,16 +1093,16 @@ function SiteTab({
 
             {/* Create */}
             <div className="mb-6 space-y-1.5">
-              <label className="font-semibold text-gray-600">新增拓扑图</label>
+              <label className="font-semibold text-gray-600">新增拓扑方案</label>
               <div className="flex space-x-2">
-                <input type="text" placeholder="请输入拓扑图名称" value={newTopoName} onChange={e => setNewTopoName(e.target.value)} className="flex-1 px-3 py-1.5 border border-gray-200 rounded outline-none" />
+                <input type="text" placeholder="请输入方案名称" value={newTopoName} onChange={e => setNewTopoName(e.target.value)} className="flex-1 px-3 py-1.5 border border-gray-200 rounded outline-none" />
                 <button onClick={() => { if (newTopoName) { setNewTopoName(''); } }} className="px-3 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center"><Plus size={12} className="mr-1"/> 添加</button>
               </div>
             </div>
 
             {/* List */}
             <div className="space-y-2 mb-6">
-              <label className="font-semibold text-gray-600 block">现有拓扑图列表</label>
+              <label className="font-semibold text-gray-600 block">现有拓扑方案列表</label>
               <div className="border border-gray-100 rounded-lg p-3 hover:border-blue-100 transition-all flex items-center justify-between bg-blue-50/20">
                 <div className="space-y-1">
                   <div className="flex items-center space-x-2">
@@ -2223,7 +2223,7 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
     setIsSyncingLocal(true);
     setTimeout(() => {
       setIsSyncingLocal(false);
-      alert(`已成功从本地网关 (SN: 8842b5) 同步 [${activeStation.name}] 最新拓扑配置与节点！`);
+      alert(`主动拉取完成：已从边端网关 (SN: 8842b5) 同步 [${activeStation.name}] 设备树！`);
     }, 600);
   };
 
@@ -2378,7 +2378,7 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-bold px-3 py-1.5 rounded shadow-sm text-[10px] transition-all flex items-center space-x-1 disabled:opacity-50"
             >
               <RefreshCw size={12} className={isSyncingLocal ? "animate-spin text-emerald-600" : "text-emerald-600"} />
-              <span>从本地同步</span>
+              <span>主动拉取</span>
             </button>
 
             {isEditMode ? (
@@ -2411,7 +2411,7 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
         {isEditMode && (
           <div className="bg-emerald-50 border-b border-emerald-100 px-4 py-2 flex items-center space-x-2 shrink-0">
             <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold">!</span>
-            <span className="text-emerald-800 text-[11px] font-medium">⚠️ 您可以拖动设备图标编辑电力拓扑!</span>
+            <span className="text-emerald-800 text-[11px] font-medium">⚠️ 您可以拖动设备图标编辑电气拓扑!</span>
           </div>
         )}
 
@@ -2455,7 +2455,7 @@ function TopologyTab({ stationName, stations, setSelectedStation, devices, setDe
                 <div className="bg-white border border-indigo-200 rounded-lg p-3 w-36 shadow-sm border-l-4 border-l-indigo-500 relative">
                   <div className="font-bold text-gray-800 flex items-center">🔌 关口电表</div>
                   <div className="text-[10px] text-gray-400 mt-1">型号: E200</div>
-                  <div className="text-[10px] text-gray-600 mt-0.5 truncate font-semibold">关口计量表A</div>
+                  <div className="text-[10px] text-gray-600 mt-0.5 truncate font-semibold">关口计量电表A</div>
                   <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                 </div>
               </div>

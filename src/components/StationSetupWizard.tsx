@@ -441,7 +441,10 @@ export function StationSetupWizard({ onComplete, versions, featurePacks, enterpr
   const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
 
   // Step 4: Topology
-  const [topologySource, setTopologySource] = useState<'app' | 'template' | 'custom'>('template');
+  // 拓扑来源：默认为「沿用边端上报设备树」。
+  // TODO(需求冲突待裁决)：'template' / 'custom' 是"平台侧绘制电气拓扑"的两条路径，与
+  // 《建站流程拓扑改造》3.1（边端已有设备树、平台零电气知识）冲突，是否删除待产品确认。
+  const [topologySource, setTopologySource] = useState<'app' | 'template' | 'custom'>('app');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('T1');
   const [customNodes, setCustomNodes] = useState<any[]>([]);
   const [customEdges, setCustomEdges] = useState<any[]>([]);
@@ -1098,7 +1101,7 @@ export function StationSetupWizard({ onComplete, versions, featurePacks, enterpr
           <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-700">
             <div className="flex items-center space-x-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-sm font-semibold text-slate-200">自动解析：网关上报拓扑（已自动对齐设备）</span>
+              <span className="text-sm font-semibold text-slate-200">自动解析：边端上报设备树（已自动对齐设备）</span>
             </div>
             <span className="text-xs text-slate-400 font-mono">SN: {activeApp?.gatewaySn || 'AB12cdef3456gh'}</span>
           </div>
@@ -1710,7 +1713,7 @@ export function StationSetupWizard({ onComplete, versions, featurePacks, enterpr
             <Sparkles size={20} className="mr-2 text-blue-400" />
             全新微网一键智能建站向导
           </h2>
-          <p className="text-xs text-slate-400 mt-1">从零碳平台同步企业，分配服务，秒级批量录入物理设备与主网拓扑逻辑</p>
+          <p className="text-xs text-slate-400 mt-1">从零碳平台同步企业，分配服务，秒级批量录入物理设备与电气拓扑逻辑</p>
         </div>
         
         {/* Simplified clean progress bar */}
@@ -2728,7 +2731,7 @@ export function StationSetupWizard({ onComplete, versions, featurePacks, enterpr
                                   <span className="text-xs font-bold text-slate-200 truncate">{app.station}</span>
                                   {app.topologyRelation && (
                                     <span className="text-[9px] bg-purple-950 text-purple-300 px-1.5 py-0.2 rounded font-semibold border border-purple-800/40 shrink-0">
-                                      📎 附带主网拓扑
+                                      📎 附带电气拓扑
                                     </span>
                                   )}
                                 </div>
@@ -3193,7 +3196,7 @@ export function StationSetupWizard({ onComplete, versions, featurePacks, enterpr
               
               <div className="lg:col-span-1 bg-slate-900/60 p-4 rounded-lg border border-slate-800 space-y-4">
                 <div>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">拓扑构建方式</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">拓扑来源</span>
                   
                   {/* Disable App Topo if no application chosen has one */}
                   {selectedApplications.some(id => MOCK_STATION_APPLICATIONS.find(a => a.id === id)?.topologyRelation) ? (
@@ -3205,12 +3208,12 @@ export function StationSetupWizard({ onComplete, versions, featurePacks, enterpr
                           : 'bg-slate-950 border-slate-850 text-slate-400'
                       }`}
                     >
-                      <span>🔄 沿用网关上报拓扑</span>
+                      <span>🔄 沿用边端上报设备树</span>
                       <span className="text-[9px] bg-emerald-950 text-emerald-400 px-1.5 py-0.2 rounded font-bold shrink-0">推荐</span>
                     </button>
                   ) : (
                     <div className="p-2.5 border border-dashed border-slate-800/80 rounded-lg text-[10px] text-slate-500 leading-normal mb-2">
-                      ⚠️ 选中的同步网关未发现物理拓扑附件，不可选沿用网关拓扑方式。
+                      ⚠️ 选中的同步网关未发现设备树上报，不可选"沿用边端上报设备树"方式。
                     </div>
                   )}
 
@@ -3234,13 +3237,13 @@ export function StationSetupWizard({ onComplete, versions, featurePacks, enterpr
                         : 'bg-slate-950 border-slate-850 text-slate-400'
                     }`}
                   >
-                    <span>🎨 自定义绘制主网拓扑</span>
+                    <span>🎨 自定义绘制电气拓扑</span>
                   </button>
                 </div>
 
                 {topologySource === 'template' && (
                   <div className="space-y-2 pt-2 border-t border-slate-800/60">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">选择主控物理拓扑模板</span>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">选择拓扑模板</span>
                     {MOCK_TOPOLOGY_TEMPLATES.map(t => (
                       <div
                         key={t.id}

@@ -378,7 +378,7 @@ export function StationWorkspace({
 }: StationWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'device' | 'incomer' | 'topo' | 'configuration' | 'pricing' | 'events'>('overview');
 
-  // Multiple topologies state (多套拓扑维护)
+  // 云端多套拓扑方案（边端只维护一套设备树）
   const [stationTopologies, setStationTopologies] = useState<any[]>(() => {
     const storageKey = `station_topologies_v2_${station.id || station.name}`;
     const saved = localStorage.getItem(storageKey);
@@ -489,7 +489,7 @@ export function StationWorkspace({
     setActiveTopoId(topoId);
 
     // Also update bound incomer status if needed
-    showNotification(`已成功将 [${targetTopo.name}] 切换为现场当前运行主拓扑！`, 'success');
+    showNotification(`已成功将 [${targetTopo.name}] 切换为现场运行拓扑！`, 'success');
   };
 
   // Confirm switch with password
@@ -903,7 +903,7 @@ export function StationWorkspace({
   const handleSaveTopo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topoForm.name.trim()) {
-      showNotification('请输入拓扑图名称！', 'error');
+      showNotification('请输入方案名称！', 'error');
       return;
     }
 
@@ -914,7 +914,7 @@ export function StationWorkspace({
         remarks: topoForm.remarks,
         updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
       } : t));
-      showNotification(`拓扑图 [${topoForm.name}] 属性已成功更新！`);
+      showNotification(`拓扑方案 [${topoForm.name}] 属性已成功更新！`);
     } else {
       const newTopo = {
         id: 'T' + Math.floor(100 + Math.random() * 900),
@@ -941,7 +941,7 @@ export function StationWorkspace({
   };
 
   const handleDeleteTopo = (topoId: string, topoName: string) => {
-    if (confirm(`确定要删除拓扑图配置 "${topoName}" 吗？此操作不可撤销。`)) {
+    if (confirm(`确定要删除拓扑方案 "${topoName}" 吗？此操作不可撤销。`)) {
       setStationTopologies(prev => {
         const filtered = prev.filter(t => t.id !== topoId);
         if (filtered.length === 0) {
@@ -1150,7 +1150,7 @@ export function StationWorkspace({
       model: link.model || 'DTSD1352',
     };
     setPendingDevices(prev => [returnedMeter, ...prev]);
-    showNotification(`已解绑测量关系，电表 [${link.name}] 退回设备池！`, 'success');
+    showNotification(`已解绑计量关系，电表 [${link.name}] 退回设备池！`, 'success');
   };
 
   // 加组：把一台设备拖到电表胶囊上，纳入该表的计量组（必须与组内设备同层级）
@@ -1586,9 +1586,7 @@ export function StationWorkspace({
     setTimeout(() => {
       const now = new Date();
       const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const syncedCount = stationTopologies.length;
-
-      // 同步全部本地拓扑：刷新现场运行拓扑的物理连线，并更新各套拓扑的同步时间
+      // 主动拉取：从边端网关拉取本站设备树，按 sn 匹配替换当前方案
       setTopoConnections([
         { from: 'grid', to: 'gw' },
         { from: 'gw', to: 'trans' },
@@ -1602,7 +1600,7 @@ export function StationWorkspace({
       ]);
       setStationTopologies(prev => prev.map(t => ({ ...t, updatedAt: stamp })));
       setIsSyncingTopo(false);
-      showNotification(`同步完成：已从本地网关 (SN: 8842b5) 同步 ${syncedCount} 套拓扑方案，节点与连线关系已更新！`, 'success');
+      showNotification('主动拉取完成：已从边端网关 (SN: 8842b5) 同步设备树，节点与父子关系已更新！', 'success');
     }, 800);
   };
 
@@ -3164,7 +3162,7 @@ export function StationWorkspace({
                         type="button"
                         onClick={() => handleOpenEditTopo(currentActiveTopo)}
                         className="p-1.5 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition"
-                        title="修改拓扑属性（名称/备注）"
+                        title="修改方案属性（名称/备注）"
                       >
                         <Settings size={14} />
                       </button>
@@ -3195,7 +3193,7 @@ export function StationWorkspace({
                           type="button"
                           onClick={() => {
                             setIsTopologyEditMode(true);
-                            showNotification('已进入拓扑编辑模式：可拖拽待编辑设备到节点下吸附组网，也可建立电表测量关联');
+                            showNotification('已进入拓扑编辑模式：可拖拽待编辑设备到节点下吸附组网，也可建立电表计量关联');
                           }}
                           className="p-1.5 text-gray-700 hover:bg-gray-100 border border-gray-300 rounded-lg transition"
                           title="编辑拓扑连线"
@@ -3208,7 +3206,7 @@ export function StationWorkspace({
                         type="button"
                         onClick={() => handleDeleteTopo(currentActiveTopo.id, currentActiveTopo.name)}
                         className="p-1.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
-                        title="删除此套拓扑图配置"
+                        title="删除此套拓扑方案"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -3260,16 +3258,16 @@ export function StationWorkspace({
                   <span>新增拓扑</span>
                 </button>
 
-                {/* 同步本地拓扑：一键同步本地全部拓扑方案 */}
+                {/* 主动拉取：从边端网关拉取本站设备树 */}
                 <button
                   type="button"
                   onClick={handleSyncTopologyFromLocal}
                   disabled={isSyncingTopo}
                   className="px-3 py-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-bold text-xs rounded-lg shadow-2xs transition flex items-center space-x-1 disabled:opacity-60 disabled:cursor-not-allowed"
-                  title="从本地网关同步全部拓扑方案的节点与连线关系"
+                  title="从边端网关主动拉取设备树，按 sn 匹配替换当前方案"
                 >
                   <HardDriveDownload size={13} className={isSyncingTopo ? 'animate-pulse' : ''} />
-                  <span>{isSyncingTopo ? '同步中...' : '同步本地拓扑'}</span>
+                  <span>{isSyncingTopo ? '拉取中...' : '主动拉取'}</span>
                 </button>
               </div>
             </div>
@@ -3442,7 +3440,7 @@ export function StationWorkspace({
                         if (nodes.length === 0) {
                           return <div className="text-center text-[10px] text-gray-400 py-8">当前拓扑暂无节点</div>;
                         }
-                        const displayName = (n: any) => (n.type === '总进线' || n.parentId === null) ? '站点Bus' : n.name;
+                        const displayName = (n: any) => (n.type === '总进线' || n.parentId === null) ? '站点总进线' : n.name;
                         const renderTreeLevel = (parentId: string | null, depth: number): React.ReactNode => {
                           const children = nodes.filter(n =>
                             n.parentId === parentId || (parentId === null && n.parentId && !nodes.some(p => p.id === n.parentId))
@@ -3985,10 +3983,10 @@ export function StationWorkspace({
                                 )}
 
                                 {isRoot ? (
-                                  /* 根节点：站点Bus 胶囊样式 */
+                                  /* 根节点：站点总进线 胶囊样式 */
                                   <div className="flex items-center space-x-1.5">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                                    <span className="text-xs font-bold text-emerald-800" title={node.name}>站点Bus</span>
+                                    <span className="text-xs font-bold text-emerald-800" title={node.name}>站点总进线</span>
                                   </div>
                                 ) : (
                                   <>

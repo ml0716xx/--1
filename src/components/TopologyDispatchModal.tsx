@@ -47,7 +47,7 @@ export function TopologyDispatchModal({
   
   // Selected Target Gateways
   const [selectedGateway, setSelectedGateway] = useState<string>('GW01');
-  const [dispatchMode, setDispatchMode] = useState<'incremental' | 'full' | 'dryrun'>('incremental');
+  const [dispatchMode, setDispatchMode] = useState<'full' | 'dryrun'>('full');
   const [selectedTopoIds, setSelectedTopoIds] = useState<string[]>([currentTopology?.id || 'T01']);
   const [includeAllTopos, setIncludeAllTopos] = useState<boolean>(false);
   
@@ -117,7 +117,7 @@ export function TopologyDispatchModal({
         operator: station.managerName || '管理员(荆汉进)',
         time: '2026-08-18 17:30:15',
         status: 'success',
-        summary: '下发7个逻辑节点及2台计量电表测量关系'
+        summary: '下发 7 个设备节点及 2 台计量电表计量关系'
       },
       {
         id: 'DISP_02',
@@ -153,7 +153,7 @@ export function TopologyDispatchModal({
   const checklistItems = [
     {
       title: '主电源总进线回路校验',
-      desc: rootsCount === 1 ? `已配置唯一根进线节点 (${topoNodes[0]?.name || '总进线'})` : '总进线节点存在配置异常',
+      desc: rootsCount === 1 ? `已配置唯一根总进线节点 (${topoNodes[0]?.name || '总进线'})` : '总进线节点存在配置异常',
       passed: rootsCount === 1,
       required: true
     },
@@ -164,8 +164,8 @@ export function TopologyDispatchModal({
       required: true
     },
     {
-      title: '计量电表与测量关系闭环',
-      desc: metersCount > 0 ? `已建立 ${metersCount} 处计量关口/分路测量关联` : '提示：暂未绑定测量电表（不影响下发，但无法上报计量电度）',
+      title: '计量电表与计量关系闭环',
+      desc: metersCount > 0 ? `已建立 ${metersCount} 处计量关口/分路计量关联` : '提示：暂未绑定计量电表（不影响下发，但无法上报计量电度）',
       passed: true,
       required: false
     },
@@ -265,7 +265,7 @@ export function TopologyDispatchModal({
       setExecutionLogs(prev => [
         ...prev,
         { time: new Date().toLocaleTimeString(), level: 'success', text: `[2/5] 通信握手鉴权通过 (RTT: ${targetGw?.latency}, 固件兼容性确认: OK)` },
-        { time: new Date().toLocaleTimeString(), level: 'info', text: `[3/5] 正在向网关边缘存储写入 ${dispatchMode === 'incremental' ? '增量热更新差量' : '全量树形'} 拓扑结构...` }
+        { time: new Date().toLocaleTimeString(), level: 'info', text: `[3/5] 正在向边端网关写入整棵设备树（全量覆盖，边端整体替换）...` }
       ]);
     }, 1500);
 
@@ -306,7 +306,7 @@ export function TopologyDispatchModal({
         operator: station.managerName || '管理员(荆汉进)',
         time: new Date().toISOString().replace('T', ' ').substring(0, 19),
         status: 'success',
-        summary: `成功${dispatchMode === 'incremental' ? '增量' : dispatchMode === 'full' ? '全量' : '仿真'}下发 ${topoNodes.length} 个节点拓扑`
+        summary: `${dispatchMode === 'full' ? '全量覆盖' : '仿真校验'}下发 ${topoNodes.length} 个设备节点`
       };
 
       setHistoryList(prev => [newHistoryItem, ...prev]);
@@ -335,7 +335,7 @@ export function TopologyDispatchModal({
                 </span>
               </div>
               <p className="text-[11px] text-gray-300 mt-0.5">
-                当前拓扑：<strong className="text-white">{currentTopology?.name || '1# 变压器高压侧拓扑图'}</strong> ({topoNodes.length} 逻辑节点)
+                当前拓扑：<strong className="text-white">{currentTopology?.name || '1# 变压器高压侧拓扑图'}</strong> ({topoNodes.length} 个设备节点)
               </p>
             </div>
           </div>
@@ -479,18 +479,11 @@ export function TopologyDispatchModal({
                   <div className="space-y-2">
                     {[
                       {
-                        mode: 'incremental',
-                        title: '增量热更新下发 (推荐)',
-                        desc: '仅下发新增/调整的设备与测量关系，不中断当前PCS储能充放电与调度策略',
-                        tag: '平滑生效',
-                        tagColor: 'bg-emerald-100 text-emerald-800'
-                      },
-                      {
                         mode: 'full',
-                        title: '全量编译重构下发',
-                        desc: '重写网关全站点表通信映射，适用于整站初次配置或主变压器架构大改',
-                        tag: '全量重写',
-                        tagColor: 'bg-purple-100 text-purple-800'
+                        title: '全量覆盖下发 (推荐)',
+                        desc: '下发整棵设备树，边端整体替换本地那一套（非追加叠加）',
+                        tag: '标准方式',
+                        tagColor: 'bg-emerald-100 text-emerald-800'
                       },
                       {
                         mode: 'dryrun',
