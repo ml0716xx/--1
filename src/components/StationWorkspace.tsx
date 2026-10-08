@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { INITIAL_VERSIONS, INITIAL_FEATURE_PACKS, PROVINCES, SALES_PRICES } from '../App';
 import { TopologyDispatchModal, DispatchHistoryItem } from './TopologyDispatchModal';
+import { OperationDataPanel } from './OperationDataPanel';
 
 // Topology device types config map
 const DEVICE_TYPE_CONFIG: Record<string, { icon: any, color: string, border: string, bg: string, badge: string }> = {
@@ -376,7 +377,7 @@ export function StationWorkspace({
   versions,
   featurePacks
 }: StationWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'device' | 'incomer' | 'topo' | 'configuration' | 'pricing' | 'events'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'device' | 'incomer' | 'topo' | 'configuration' | 'pricing' | 'operation' | 'events'>('device');
 
   // 云端多套拓扑方案（边端只维护一套设备树）
   const [stationTopologies, setStationTopologies] = useState<any[]>(() => {
@@ -2317,13 +2318,12 @@ export function StationWorkspace({
       <div className="flex items-center bg-gray-50 border-b border-gray-200 px-6 shrink-0 h-10">
         <div className="flex space-x-6 h-full">
           {[
-            { id: 'overview', label: '站点概览', icon: <Activity size={14} /> },
             { id: 'device', label: '设备管理', icon: <Server size={14} /> },
             { id: 'incomer', label: '进线管理', icon: <Zap size={14} /> },
             { id: 'topo', label: '拓扑维护', icon: <Network size={14} /> },
             { id: 'configuration', label: '组态维护', icon: <LayoutGrid size={14} /> },
             { id: 'pricing', label: '电价配置', icon: <Sliders size={14} /> },
-            { id: 'events', label: '事件记录', icon: <FileText size={14} /> },
+            { id: 'operation', label: '运营数据', icon: <Activity size={14} /> },
           ].map(tab => (
             <button
               key={tab.id}
@@ -4669,6 +4669,12 @@ export function StationWorkspace({
             )}
 
           </div>
+        )}
+
+
+        {/* ==================== TAB 6: OPERATION DATA (AI 策略仿真) ==================== */}
+        {activeTab === 'operation' && (
+          <OperationDataPanel station={station} />
         )}
 
 
