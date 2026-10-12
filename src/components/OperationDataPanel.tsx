@@ -36,6 +36,9 @@ import { PushReportModal } from './PushReportModal';
 /** 取文案键：把「储能收益 (元)」归一为「储能收益」 */
 const copyKey = (item: string) => item.replace(/\s*\([^)]*\)\s*$/, '').trim();
 
+/** 每日明细末组为率类指标（自发自用率），保留 2 位小数，其余组 1 位 */
+const DAILY_RATE_GROUP = DAILY_HEADERS.length - 1;
+
 
 /** 金额/电量：千分位，默认 2 位小数 */
 const nf = (v: number | null | undefined, d = 2) => {
@@ -403,7 +406,7 @@ function MonthlyView() {
           <span className="text-[11px] text-gray-400">{DAILY_TEXT.hint}</span>
         </div>
         <div className="overflow-auto max-h-[560px]">
-          <table className="text-[11px] border-collapse min-w-[1700px]">
+          <table className="text-[11px] border-collapse min-w-[1780px]">
             <thead className="sticky top-0 z-10">
               <tr className="bg-gray-100 text-gray-600">
                 <th rowSpan={2} className="px-3 py-2 border border-gray-200 font-semibold sticky left-0 bg-gray-100 z-20">日期</th>
@@ -415,7 +418,6 @@ function MonthlyView() {
                 <th colSpan={3} className="px-2 py-1.5 border border-gray-200 font-semibold text-center whitespace-nowrap bg-blue-50 text-blue-800">
                   {CYCLE_TEXT.header} <span className="text-blue-400 font-normal">({CYCLE_TEXT.unit})</span>
                 </th>
-                <th rowSpan={2} className="px-3 py-2 border border-gray-200 font-semibold">备注</th>
               </tr>
               <tr className="bg-gray-50 text-gray-500">
                 {DAILY_HEADERS.map(h => (
@@ -433,10 +435,9 @@ function MonthlyView() {
             <tbody>
               {DAILY_ROWS.map((row, ri) => {
                 const date = row[0] as string;
-                const note = row[25] as string;
                 const cyc = CYCLE_ROWS[ri];
                 return (
-                  <tr key={date} className={`hover:bg-blue-50/40 ${note ? 'bg-amber-50/40' : ''}`}>
+                  <tr key={date} className="hover:bg-blue-50/40">
                     <td className="px-3 py-1.5 border border-gray-200 font-mono text-gray-700 whitespace-nowrap sticky left-0 bg-white z-10">{date}</td>
                     {DAILY_HEADERS.map((h, g) => {
                       const sim = row[1 + g * 3] as number | null;
@@ -444,8 +445,8 @@ function MonthlyView() {
                       const dev = row[3 + g * 3] as number | null;
                       return (
                         <React.Fragment key={h}>
-                          <td className="px-2 py-1.5 border border-gray-200 text-right font-mono text-gray-700">{nf(real, g === 7 ? 2 : 1)}</td>
-                          <td className="px-2 py-1.5 border border-gray-200 text-right font-mono text-gray-700">{nf(sim, g === 7 ? 2 : 1)}</td>
+                          <td className="px-2 py-1.5 border border-gray-200 text-right font-mono text-gray-700">{nf(real, g === DAILY_RATE_GROUP ? 2 : 1)}</td>
+                          <td className="px-2 py-1.5 border border-gray-200 text-right font-mono text-gray-700">{nf(sim, g === DAILY_RATE_GROUP ? 2 : 1)}</td>
                           <td className={`px-2 py-1.5 border border-gray-200 text-right font-mono font-semibold ${dev === null ? 'text-gray-300' : TONE_TEXT[toneOf(dev)]}`}>
                             {dev === null ? '—' : sf(dev, 2, '')}
                           </td>
@@ -457,11 +458,6 @@ function MonthlyView() {
                     <td className={`px-2 py-1.5 border border-gray-200 text-right font-mono font-semibold bg-blue-50/30 ${cyc?.dev === null || cyc?.dev === undefined ? 'text-gray-300' : TONE_TEXT[toneOf(cyc.dev)]}`}>
                       {cyc?.dev === null || cyc?.dev === undefined ? '—' : sf(cyc.dev, 2, '')}
                     </td>
-                    <td className="px-3 py-1.5 border border-gray-200 whitespace-nowrap">
-                      {note ? (
-                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">{note}</span>
-                      ) : null}
-                    </td>
                   </tr>
                 );
               })}
@@ -471,8 +467,8 @@ function MonthlyView() {
                 </td>
                 {DAILY_HEADERS.map((h, g) => (
                   <React.Fragment key={h}>
-                    <td className="px-2 py-2 border border-gray-200 text-right font-mono text-gray-800">{nf(DAILY_TOTAL[2 + g * 3] as number, g === 7 ? 2 : 1)}</td>
-                    <td className="px-2 py-2 border border-gray-200 text-right font-mono text-gray-800">{nf(DAILY_TOTAL[1 + g * 3] as number, g === 7 ? 2 : 1)}</td>
+                    <td className="px-2 py-2 border border-gray-200 text-right font-mono text-gray-800">{nf(DAILY_TOTAL[2 + g * 3] as number, g === DAILY_RATE_GROUP ? 2 : 1)}</td>
+                    <td className="px-2 py-2 border border-gray-200 text-right font-mono text-gray-800">{nf(DAILY_TOTAL[1 + g * 3] as number, g === DAILY_RATE_GROUP ? 2 : 1)}</td>
                     <td className={`px-2 py-2 border border-gray-200 text-right font-mono ${TONE_TEXT[toneOf((DAILY_TOTAL[3 + g * 3] as number) || 0)]}`}>
                       {DAILY_TOTAL[3 + g * 3] === null ? '—' : sf(DAILY_TOTAL[3 + g * 3] as number, 2, '')}
                     </td>
@@ -483,7 +479,6 @@ function MonthlyView() {
                 <td className={`px-2 py-2 border border-gray-200 text-right font-mono bg-yellow-100 ${TONE_TEXT[toneOf(CYCLE_TOTAL.dev ?? 0)]}`}>
                   {CYCLE_TOTAL.dev === null ? '—' : sf(CYCLE_TOTAL.dev, 2, '')}
                 </td>
-                <td className="px-3 py-2 border border-gray-200"></td>
               </tr>
             </tbody>
           </table>

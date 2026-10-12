@@ -103,8 +103,10 @@ def slots_of(tiers, key):
     return out
 
 MONEY_ITEMS = ["储能收益 (元)", "光伏收益 (元)", "总收益 (元)", "单位放电净收益"]
-DAILY_HEADERS = ["光伏发电量", "上网电量", "自用电量", "储能充电量", "储能放电量", "储能收益", "总收益", "自发自用率"]
-DAILY_UNITS = ["kWh", "kWh", "kWh", "kWh", "kWh", "元", "元", "%"]
+# 列序：收益类在前（总收益打头），其后电量类，末位效率类；
+# 与视图层 OperationDataPanel.tsx 的 DAILY_RATE_GROUP 小数位判断、文案层 DAILY_TEXT.title 三处必须同时改
+DAILY_HEADERS = ["总收益", "储能收益", "光伏收益", "光伏发电量", "上网电量", "自用电量", "储能充电量", "储能放电量", "自发自用率"]
+DAILY_UNITS = ["元", "元", "元", "kWh", "kWh", "kWh", "kWh", "kWh", "%"]
 
 PARAM_ROWS = [
     {"k": "储能容量 (kWh)", "v": "2,088", "d": "电池额定容量，等效循环 = 日充电量 ÷ 该值"},
@@ -460,7 +462,7 @@ def build(station_dir):
         ("电量类", "储能放电量 (kWh)", sm["discharge_kwh"], rm["discharge_kwh"], False),
         ("收益类", "光伏收益 (元)", sm["pv_profit"], rm["pv_profit"], False),
         ("收益类", "储能收益 (元)", sm["storage_profit"], rm["storage_profit"], False),
-        ("收益类", "弃光机会收益 (元)", 0.0, 0.0, False),
+        ("收益类", "限电止损收益 (元)", 0.0, 0.0, False),
         ("收益类", "总收益 (元)", sm["total_profit"], rm["total_profit"], False),
         ("效率类", "自发自用率 (%)", sm["self_rate"], rm["self_kwh"] / rm["gen_kwh"] * 100, True),
         ("效率类", "储能利用率 (%)", sm["util_rate"], rm["discharge_kwh"] / rm["charge_kwh"] * 100, True),
@@ -536,36 +538,33 @@ def build(station_dir):
     A("")
 
     # 每日明细
-    A("// 每日对比明细：31 天 × 8 组（仿真 / 实际运行 / 偏差%）+ 备注")
+    A("// 每日对比明细：31 天 × 9 组（仿真 / 实际运行 / 偏差%）")
     A(f"export const DAILY_HEADERS = {j(DAILY_HEADERS)};")
     A(f"export const DAILY_UNITS = {j(DAILY_UNITS)};")
     A("export const DAILY_ROWS: (string | number | null)[][] = [")
-    notes = {"2026-08-12": "案例日", "2026-08-27": "案例日", "2026-08-28": "案例日", "2026-08-17": "仿真低于真实"}
     for date in dates:
         s, r = sim_days[date], real_days[date]
         row = [date]
         for g, (sv, rv) in enumerate([
-            (s["gen_kwh"], r["gen_kwh"]), (s["export_kwh"], r["export_kwh"]),
-            (s["self_kwh"], r["self_kwh"]), (s["charge_kwh"], r["charge_kwh"]),
-            (s["discharge_kwh"], r["discharge_kwh"]), (s["storage_profit"], r["storage_profit"]),
-            (s["total_profit"], r["total_profit"]),
+            (s["total_profit"], r["total_profit"]), (s["storage_profit"], r["storage_profit"]),
+            (s["pv_profit"], r["pv_profit"]), (s["gen_kwh"], r["gen_kwh"]),
+            (s["export_kwh"], r["export_kwh"]), (s["self_kwh"], r["self_kwh"]),
+            (s["charge_kwh"], r["charge_kwh"]), (s["discharge_kwh"], r["discharge_kwh"]),
             (s["self_rate"], r["self_kwh"] / r["gen_kwh"] * 100),
         ]):
-            # 率类指标（第 8 组）不逐日给偏差%（母版留空），只在合计行以百分点差呈现
-            row += [sv, rv, None if g == 7 else dev(sv, rv)]
-        row.append(notes.get(date, ""))
+            # 率类指标（末组）不逐日给偏差%（母版留空），只在合计行以百分点差呈现
+            row += [sv, rv, None if g == len(DAILY_HEADERS) - 1 else dev(sv, rv)]
         A("  " + j(row, 2) + ",")
     A("];")
     total_row = ["月度合计 / 加权"]
     for g, (sv, rv) in enumerate([
-        (sm["gen_kwh"], rm["gen_kwh"]), (sm["export_kwh"], rm["export_kwh"]),
-        (sm["self_kwh"], rm["self_kwh"]), (sm["charge_kwh"], rm["charge_kwh"]),
-        (sm["discharge_kwh"], rm["discharge_kwh"]), (sm["storage_profit"], rm["storage_profit"]),
-        (sm["total_profit"], rm["total_profit"]),
+        (sm["total_profit"], rm["total_profit"]), (sm["storage_profit"], rm["storage_profit"]),
+        (sm["pv_profit"], rm["pv_profit"]), (sm["gen_kwh"], rm["gen_kwh"]),
+        (sm["export_kwh"], rm["export_kwh"]), (sm["self_kwh"], rm["self_kwh"]),
+        (sm["charge_kwh"], rm["charge_kwh"]), (sm["discharge_kwh"], rm["discharge_kwh"]),
         (sm["self_rate"], rm["self_kwh"] / rm["gen_kwh"] * 100),
     ]):
-        total_row += [sv, rv, (sv - rv) if g == 7 else dev(sv, rv)]
-    total_row.append("")
+        total_row += [sv, rv, (sv - rv) if g == len(DAILY_HEADERS) - 1 else dev(sv, rv)]
     A("export const DAILY_TOTAL: (string | number | null)[] = " + j(total_row, 2) + ";")
     A("")
 
