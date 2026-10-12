@@ -15,6 +15,7 @@ import {
 import { INITIAL_VERSIONS, INITIAL_FEATURE_PACKS, PROVINCES, SALES_PRICES } from '../App';
 import { TopologyDispatchModal, DispatchHistoryItem } from './TopologyDispatchModal';
 import { OperationDataPanel } from './OperationDataPanel';
+import { ConfigurationListPage } from './ConfigurationListPage';
 
 // Topology device types config map
 const DEVICE_TYPE_CONFIG: Record<string, { icon: any, color: string, border: string, bg: string, badge: string }> = {
@@ -2321,7 +2322,7 @@ export function StationWorkspace({
             { id: 'device', label: '设备管理', icon: <Server size={14} /> },
             { id: 'incomer', label: '进线管理', icon: <Zap size={14} /> },
             { id: 'topo', label: '拓扑维护', icon: <Network size={14} /> },
-            { id: 'configuration', label: '组态维护', icon: <LayoutGrid size={14} /> },
+            { id: 'configuration', label: '组态管理', icon: <LayoutGrid size={14} /> },
             { id: 'pricing', label: '电价配置', icon: <Sliders size={14} /> },
             { id: 'operation', label: '运营数据', icon: <Activity size={14} /> },
           ].map(tab => (
@@ -4327,17 +4328,12 @@ export function StationWorkspace({
         )}
 
 
-        {/* ==================== TAB: CONFIGURATION (组态维护 - 空白处理) ==================== */}
+        {/* ==================== TAB: CONFIGURATION (组态管理) ==================== */}
         {activeTab === 'configuration' && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 min-h-[520px] flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 mb-4 shadow-2xs">
-              <LayoutGrid size={28} className="text-gray-400" />
-            </div>
-            <h3 className="text-sm font-bold text-gray-800 mb-1">组态维护</h3>
-            <p className="text-xs text-gray-400 max-w-sm">
-              当前站点暂未配置组态画面，内容暂时空白处理。
-            </p>
-          </div>
+          <ConfigurationListPage
+            stationName={station.name}
+            onNotify={(n) => n && showNotification(n.text, n.type)}
+          />
         )}
 
 
