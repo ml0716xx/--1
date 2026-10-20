@@ -45,34 +45,67 @@ def slot_of(datetime_str):
     return (int(datetime_str[11:13]) * 60 + int(datetime_str[14:16])) // 15
 
 
-def derive_tou(records):
-    """从仿真记录自带的 import_price 推导分时档位窗口。
+def self_rate(self_kwh, gen_kwh):
+    """自发自用率；无光伏发电量的日子置 None（视图显示「—」），避免除零。"""
+    return (self_kwh / gen_kwh * 100) if gen_kwh else None
 
-    为什么不手写：档位时段是站点参数，各站不同；写死会与仿真口径不一致
+
+def derive_price(records):
+    """从仿真记录自带的 import_price 推导电价机制与（分时站点的）档位窗口。
+
+    两种机制（2026-10-19 扩展，原实现只认固定分时、遇到 >4 档直接退出）：
+
+      - **分时电价（tou）**：全月不同价格 ≤ 4 种 → 按价格从低到高映射
+        谷 / 平 / 肩 / 峰，并把同价 slot 合并成连续区间作为档位窗口。
+      - **市场化电价（market）**：不同价格 > 4 种（现货 / 中长期逐 15min 变价）
+        → 不生成档位，改输出价格区间、时间加权均价与变价点位数。
+
+    为什么窗口必须推导：档位时段是站点参数，各站不同；写死会与仿真口径不一致
     （2026-10-08 实测：某站真实窗口是谷 01:00–06:00 / 峰 17:00–22:00，
     手写的「谷 00:00–05:00 / 峰 08:00–11:00+18:00–20:00」会把色带画错，
     连带动画的充放电量与「按档电价」对不上母版）。
     """
     slot_price = {}
+    day_price = {}
     for r in records:
         ec = r.get("metrics_data", {}).get("economic") or {}
         pr = ec.get("import_price")
         if pr is None:
             return None
-        slot_price[slot_of(r["time_data"]["datetime"])] = float(pr)
+        d = r["time_data"]["datetime"][:10]
+        s = slot_of(r["time_data"]["datetime"])
+        slot_price[s] = float(pr)
+        day_price.setdefault(d, {})[s] = float(pr)
     if len(slot_price) < 96:
         return None
-    prices = sorted(set(slot_price.values()))
+    # 全月所有 15min 点的价格（市场化站每个 slot 每天不同，统计必须覆盖整月而不是最后一天）
+    all_vals = [v for m in day_price.values() for v in m.values()]
+    prices = sorted(set(all_vals))
+
+    # ---- 市场化电价：价格连续变价，没有档位概念
+    if len(prices) > 4:
+        return {
+            "mode": "market",
+            "tiers": [],
+            "slot_price": slot_price,
+            "day_price": day_price,
+            "market": {
+                "min": min(all_vals),
+                "max": max(all_vals),
+                "avg": sum(all_vals) / len(all_vals),   # 时间加权均价（每个 15min 点等权）
+                "distinct": len(prices),
+            },
+        }
+
+    # ---- 分时电价：按价格档数映射档位名
     if len(prices) == 1:
         keys = {prices[0]: "flat"}
     elif len(prices) == 2:
         keys = {prices[0]: "valley", prices[1]: "peak"}
     elif len(prices) == 3:
         keys = {prices[0]: "valley", prices[1]: "flat", prices[2]: "peak"}
-    elif len(prices) == 4:
-        keys = {prices[0]: "valley", prices[1]: "flat", prices[2]: "shoulder", prices[3]: "peak"}
     else:
-        raise SystemExit(f"分时电价档位多于 4 档（{prices}），本脚本未支持，请先扩展档位模型")
+        keys = {prices[0]: "valley", prices[1]: "flat", prices[2]: "shoulder", prices[3]: "peak"}
     seq = [keys[slot_price[s]] for s in range(96)]
     tiers = []
     for k in TIER_SEQ:
@@ -91,7 +124,7 @@ def derive_tou(records):
             "ranges": ranges,
             "hours": len(slots) / 4,
         })
-    return tiers
+    return {"mode": "tou", "tiers": tiers, "slot_price": slot_price, "day_price": day_price, "market": None}
 
 
 def slots_of(tiers, key):
@@ -200,7 +233,7 @@ def month_metrics(summary, records):
         "charge_kwh": charges, "discharge_kwh": discharges,
         "storage_profit": s("storage_profit"), "pv_profit": s("pv_profit"),
         "total_profit": s("total_profit"),
-        "self_rate": s("self_kwh") / s("gen_kwh") * 100,
+        "self_rate": self_rate(s("self_kwh"), s("gen_kwh")),
         "util_rate": discharges / charges * 100,
     }
 
@@ -255,13 +288,15 @@ def real_curve(charge_kwh, discharge_kwh, chg_slots, dis_slots):
     return pts
 
 
-def merge_curve(sim_pts, real_pts, tier_seq):
+def merge_curve(sim_pts, real_pts, tier_seq, slot_price):
     out = []
     for i in range(96):
         hh, mm = divmod(i * 15, 60)
         out.append({
             "time": f"{hh:02d}:{mm:02d}",
             "tier": tier_key_of(i, tier_seq),
+            # buy = 该 15min 的购电结算价（分时站点即档位价；市场化站点逐点变价）
+            "buy": round(slot_price[i], 4) if i in slot_price else None,
             "sim": sim_pts[i]["power"] if i < len(sim_pts) else 0.0,
             "real": real_pts[i]["power"],
             "socSim": sim_pts[i]["soc"] if i < len(sim_pts) else 0.0,
@@ -304,23 +339,44 @@ def j(obj, indent=2):
 
 def build(station_dir):
     sim, wb, json_path, report_path = load_sources(station_dir)
+    station_name = os.path.basename(os.path.normpath(station_dir))
     real_days, real_total = parse_report(wb)
     sim_days, records = parse_sim(sim)
     sm = month_metrics(sim_days, records)
     rm = real_total
 
-    # ---- 分时档位：由仿真记录的 import_price 推导（推导失败才用兜底常量）
-    tou = derive_tou(records)
-    if tou is None:
-        tou = TOU_TIERS_FALLBACK
+    # ---- 电价机制：由仿真记录的 import_price 推导（推导失败才用兜底的分时档位）
+    price = derive_price(records)
+    if price is None:
+        slot_price = {}
+        for t in TOU_TIERS_FALLBACK:
+            for a, b in t["ranges"]:
+                for s in range(a, b):
+                    slot_price[s] = t["price"]
+        price = {"mode": "tou", "tiers": TOU_TIERS_FALLBACK, "slot_price": slot_price,
+                 "day_price": {}, "market": None}
+    price_mode = price["mode"]
+    market = price["market"]
+    tou = price["tiers"]
+    slot_price = price["slot_price"]
+    # 注意：此处必须与下方「电价加权」用的累加器 day_price 区分命名，否则会被覆盖
+    day_slot_price = price.get("day_price") or {}
     tier_seq = ["flat"] * 96
     for t in tou:
         for a, b in t["ranges"]:
             for s in range(a, b):
                 tier_seq[s] = t["key"]
-    # 实际运行侧曲线还原用的窗口：谷段充电、峰段放电
-    chg_slots = slots_of(tou, "valley") or slots_of(tou, "flat") or list(range(0, 96))
-    dis_slots = slots_of(tou, "peak") or slots_of(tou, "shoulder") or list(range(0, 96))
+    if price_mode == "market":
+        # 市场化电价没有档位，tier 置空，避免 UI 把它当「平段」展示
+        tier_seq = [""] * 96
+    # 实际运行侧曲线还原用的窗口：分时站取谷/峰档；市场化站点取最便宜的 5h 充、最贵的 5h 放
+    if price_mode == "market":
+        ranked = sorted(range(96), key=lambda s: slot_price.get(s, 0.0))
+        chg_slots = sorted(ranked[:20])
+        dis_slots = sorted(ranked[-20:])
+    else:
+        chg_slots = slots_of(tou, "valley") or slots_of(tou, "flat") or list(range(0, 96))
+        dis_slots = slots_of(tou, "peak") or slots_of(tou, "shoulder") or list(range(0, 96))
 
     # ---- 电价读数（仿真侧）：按逐 15min 电价加权；校验口径 = 母版的充电成本 / 放电收益
     day_price = {}
@@ -378,7 +434,7 @@ def build(station_dir):
     A("// 换站点 / 换月份时重跑导出脚本即可，视图组件（OperationDataPanel.tsx）不需改动。")
     A("")
     A("export const SIM_META = {")
-    A(f'  station: {ts("济南鼎润纸制品")},')
+    A(f"  station: {ts(station_name)},")
     A(f"  period: {ts(meta_period)},")
     A(f"  days: {len(dates)},")
     A(f"  version: {ts(version)},")
@@ -395,6 +451,20 @@ def build(station_dir):
         A(f'  {{ key: {ts(t["key"])}, price: {ts(t["price"])}, ranges: {ranges}, hours: {ts(t["hours"])} }},')
     A("];")
     A("")
+    A("// 电价机制：tou = 固定分时档位；market = 市场化（现货/中长期）逐 15min 变价，无固定档位")
+    A(f'export const PRICE_MODE: "tou" | "market" = {ts(price_mode)};')
+    A("")
+    if market:
+        A("// 市场化电价统计：min/max 为全月 96 点价格极值，avg 为时间加权均价，distinct 为不同价格个数")
+        A("export const MARKET_PRICE: { min: number; max: number; avg: number; distinct: number } | null = {")
+        A(f'  min: {ts(round(market["min"], 4))},')
+        A(f'  max: {ts(round(market["max"], 4))},')
+        A(f'  avg: {ts(round(market["avg"], 4))},')
+        A(f'  distinct: {market["distinct"]},')
+        A("};")
+    else:
+        A("export const MARKET_PRICE: { min: number; max: number; avg: number; distinct: number } | null = null;")
+    A("")
     A("// 电价读数：售电（余电上网）结算单价 + 仿真侧加权电价。")
     A("// 实际运行报表为日粒度、未拆分充电成本与放电收益，故实际侧不计加权电价（文案层负责说明）。")
     A("// 缺值一律为 null（文案层据 null 显示「—」），类型显式标注以免字面量把 null 收窄掉")
@@ -406,7 +476,37 @@ def build(station_dir):
     A("};")
     A("")
 
-    # KPI 卡
+    # ---- KPI 卡
+    # 仿真指标①：光伏消纳率 = 光伏自用电量 ÷ 光伏发电量 × 100%
+    consume_sim = self_rate(sm["self_kwh"], sm["gen_kwh"])
+    consume_real = self_rate(rm["self_kwh"], rm["gen_kwh"])
+
+    # 仿真指标②：综合度电成本 = 电网下网电量 × 购电电价 ÷ 负荷用电量
+    # 负荷曲线取仿真输入（仿真在相同负荷下重排储能，故即实际负荷），两侧同口径
+    load_kwh = sum(r["power_data"]["p_load"] for r in records) * 0.25
+    imp_sim = cost_sim_grid = 0.0
+    for r in records:
+        e = r["power_data"]["p_grid_import"] * 0.25
+        imp_sim += e
+        cost_sim_grid += e * float(r["metrics_data"]["economic"]["import_price"])
+    # 实际侧：报表没有下网电量与电费字段，下网量由电量平衡倒推
+    imp_real = load_kwh + rm["export_kwh"] + rm["charge_kwh"] - rm["gen_kwh"] - rm["discharge_kwh"]
+    # 实际侧也没有逐 15min 功率，用「负荷 − 光伏」的净下网形状作其下网时段结构
+    # （实际储能日充放量仅占负荷一成上下，对时段结构的扰动可忽略）
+    nat_kwh = nat_cost = 0.0
+    for r in records:
+        e = (r["power_data"]["p_load"] - r["power_data"]["p_pv"]) * 0.25
+        if e > 0:
+            nat_kwh += e
+            nat_cost += e * float(r["metrics_data"]["economic"]["import_price"])
+    real_imp_price = nat_cost / nat_kwh if nat_kwh else None
+    cost_real_grid = imp_real * real_imp_price if real_imp_price is not None else None
+    # 分母：负荷用电量 = 下网电量 + 光伏自用电量 + 储能放电量（PRD 4.3 Q3）
+    den_sim = imp_sim + sm["self_kwh"] + sm["discharge_kwh"]
+    den_real = imp_real + rm["self_kwh"] + rm["discharge_kwh"]
+    unit_cost_sim = cost_sim_grid / den_sim if den_sim else None
+    unit_cost_real = cost_real_grid / den_real if (cost_real_grid is not None and den_real) else None
+
     unit_sim = sm["storage_profit"] / sm["discharge_kwh"]
     unit_real = rm["storage_profit"] / rm["discharge_kwh"]
     cyc_sim = sm["charge_kwh"] / CAP_KWH
@@ -415,7 +515,9 @@ def build(station_dir):
     kpis = [
         ("总收益", sm["total_profit"], rm["total_profit"], "元", 2),
         ("储能收益", sm["storage_profit"], rm["storage_profit"], "元", 2),
-        ("光伏收益", sm["pv_profit"], rm["pv_profit"], "元", 2),
+        # 「光伏收益」卡按 2026-10-20 领导要求换成「光伏消纳率」，收益仍在分项对比表中
+        ("光伏消纳率", consume_sim, consume_real, "%", 2),
+        ("综合度电成本", unit_cost_sim, unit_cost_real, "元/kWh", 4),
         ("单位放电净收益", unit_sim, unit_real, "元/kWh", 3),
         ("等效循环", cyc_sim, cyc_real, "次", 1),
         ("储能利用率", sm["util_rate"], rm["discharge_kwh"] / rm["charge_kwh"] * 100, "%", 2),
@@ -424,6 +526,9 @@ def build(station_dir):
     for name, s, r, unit, dec in kpis:
         # 偏差口径与母版一致：金额类用相对差（%），次数类用绝对差，比率类用 pp
         if unit == "元":
+            d = f"{(s - r) / r * 100:+.1f}%"
+        elif name == "综合度电成本":
+            # 成本类看降幅百分比：负值即「降低」，比绝对差值更适合当卖点口径
             d = f"{(s - r) / r * 100:+.1f}%"
         elif unit == "元/kWh":
             d = f"{s - r:+.3f}"
@@ -439,15 +544,15 @@ def build(station_dir):
     A("")
 
     # 分项差额
-    A("// 分项差额（方向与说明见 operationSimCopy.ts 的 MONEY_DIR / MONEY_NOTE）")
+    A("// 分项差额（说明见 operationSimCopy.ts 的 MONEY_NOTE）")
     A("export const MONEY_ROWS = [")
     for name, s, r in [
         ("储能收益 (元)", sm["storage_profit"], rm["storage_profit"]),
         ("光伏收益 (元)", sm["pv_profit"], rm["pv_profit"]),
         ("总收益 (元)", sm["total_profit"], rm["total_profit"]),
+        # 「单位放电净收益」行按 2026-10-20 领导要求从分项对比表去掉（该行两侧为 '—'，只有差值可读）
     ]:
         A(f'  {{ item: {ts(name)}, sim: {ts(s)}, real: {ts(r)}, diff: {ts(s - r)} }},')
-    A(f'  {{ item: {ts("单位放电净收益")}, sim: {ts("—")}, real: {ts("—")}, diff: {ts(unit_sim - unit_real)} }},')
     A("];")
     A("")
 
@@ -464,7 +569,7 @@ def build(station_dir):
         ("收益类", "储能收益 (元)", sm["storage_profit"], rm["storage_profit"], False),
         ("收益类", "限电止损收益 (元)", 0.0, 0.0, False),
         ("收益类", "总收益 (元)", sm["total_profit"], rm["total_profit"], False),
-        ("效率类", "自发自用率 (%)", sm["self_rate"], rm["self_kwh"] / rm["gen_kwh"] * 100, True),
+        ("效率类", "自发自用率 (%)", sm["self_rate"], self_rate(rm["self_kwh"], rm["gen_kwh"]), True),
         ("效率类", "储能利用率 (%)", sm["util_rate"], rm["discharge_kwh"] / rm["charge_kwh"] * 100, True),
         ("效率类", "日均充放次数 (次/日)", cyc_sim / len(dates), cyc_real / len(dates), False),
     ]
@@ -482,7 +587,7 @@ def build(station_dir):
     A("// 案例日（典型日分析可切换）：储能收益差最大的 3 天 + 1 个反向日")
     A(f"export const CASE_DAY_DATES = {j(case_days)};")
     A("")
-    A("/** 案例日对照（行序：光伏发电量 → … → 自发自用率 → 当日充放电加权电价；中途一行充放次数） */")
+    A("/** 案例日对照（行序：光伏发电量 → … → 充放次数 → 储能收益 → 光伏收益 → 总收益 → 当日充放电加权电价） */")
     A("export interface CaseDayRow { name: string; sim: number; real: number | null; diff: number | null }")
     A("export const CASE_DAY_ROWS: Record<string, CaseDayRow[]> = {")
     for date in case_days:
@@ -499,26 +604,24 @@ def build(station_dir):
             ("储能充电量 (kWh)", s["charge_kwh"], r["charge_kwh"]),
             ("储能放电量 (kWh)", s["discharge_kwh"], r["discharge_kwh"]),
             ("充放次数 (次)", s["charge_kwh"] / CAP_KWH, r["charge_kwh"] / CAP_KWH),
+            # 「自发自用率」行按 2026-10-20 领导要求从案例日对照表去掉（月度指标对比里仍保留）
             ("储能收益 (元)", s["storage_profit"], r["storage_profit"]),
+            ("光伏收益 (元)", s["pv_profit"], r["pv_profit"]),
             ("总收益 (元)", s["total_profit"], r["total_profit"]),
-            ("自发自用率 (%)", s["self_rate"], r["self_kwh"] / r["gen_kwh"] * 100),
             # 实际运行报表未拆分充电成本与放电收益 → 实际侧无加权电价，置 null（视图显示「—」）
             ("充电加权电价 (元/kWh)", cw, None),
             ("放电加权电价 (元/kWh)", dw, None),
         ]
         A(f"  {ts(date)}: [")
         for name, sv, rv in rows:
-            if rv is None or name.startswith("自发自用率"):
-                d = None
-            else:
-                d = sv - rv
+            d = None if rv is None else sv - rv
             A(f"    {{ name: {ts(name)}, sim: {ts(sv)}, real: {ts(rv)}, diff: {ts(d)} }},")
         A("  ],")
     A("};")
     A("")
 
     A("/** 案例日 15min 曲线：sim 为仿真结果原始序列，real 为按当日报表电量还原的实际运行序列 */")
-    A("export interface CaseDayPoint { time: string; tier: string; sim: number; real: number; socSim: number; socReal: number }")
+    A("export interface CaseDayPoint { time: string; tier: string; buy: number | null; sim: number; real: number; socSim: number; socReal: number }")
     A("export const CASE_DAY_CURVES: Record<string, CaseDayPoint[]> = {")
     for date in case_days:
         r = real_days[date]
@@ -526,11 +629,12 @@ def build(station_dir):
             sim_curve(records, date),
             real_curve(r["charge_kwh"], r["discharge_kwh"], chg_slots, dis_slots),
             tier_seq,
+            day_slot_price.get(date, slot_price),
         )
         A(f"  {ts(date)}: [")
         for p in pts:
             A(
-                f'    {{ time: {ts(p["time"])}, tier: {ts(p["tier"])}, sim: {ts(p["sim"])}, '
+                f'    {{ time: {ts(p["time"])}, tier: {ts(p["tier"])}, buy: {ts(p["buy"])}, sim: {ts(p["sim"])}, '
                 f'real: {ts(p["real"])}, socSim: {ts(p["socSim"])}, socReal: {ts(p["socReal"])} }},'
             )
         A("  ],")
@@ -550,7 +654,7 @@ def build(station_dir):
             (s["pv_profit"], r["pv_profit"]), (s["gen_kwh"], r["gen_kwh"]),
             (s["export_kwh"], r["export_kwh"]), (s["self_kwh"], r["self_kwh"]),
             (s["charge_kwh"], r["charge_kwh"]), (s["discharge_kwh"], r["discharge_kwh"]),
-            (s["self_rate"], r["self_kwh"] / r["gen_kwh"] * 100),
+            (s["self_rate"], self_rate(r["self_kwh"], r["gen_kwh"])),
         ]):
             # 率类指标（末组）不逐日给偏差%（母版留空），只在合计行以百分点差呈现
             row += [sv, rv, None if g == len(DAILY_HEADERS) - 1 else dev(sv, rv)]
@@ -562,7 +666,7 @@ def build(station_dir):
         (sm["pv_profit"], rm["pv_profit"]), (sm["gen_kwh"], rm["gen_kwh"]),
         (sm["export_kwh"], rm["export_kwh"]), (sm["self_kwh"], rm["self_kwh"]),
         (sm["charge_kwh"], rm["charge_kwh"]), (sm["discharge_kwh"], rm["discharge_kwh"]),
-        (sm["self_rate"], rm["self_kwh"] / rm["gen_kwh"] * 100),
+        (sm["self_rate"], self_rate(rm["self_kwh"], rm["gen_kwh"])),
     ]):
         total_row += [sv, rv, (sv - rv) if g == len(DAILY_HEADERS) - 1 else dev(sv, rv)]
     A("export const DAILY_TOTAL: (string | number | null)[] = " + j(total_row, 2) + ";")
@@ -621,7 +725,15 @@ def build(station_dir):
     param_rows = []
     for row in PARAM_ROWS:
         if row["k"].startswith("购电价档位"):
-            row = dict(row, v=" / ".join(f"{p:.4f}" for p in sorted(t["price"] for t in tou)))
+            if price_mode == "market":
+                row = dict(
+                    row,
+                    k="购电价 (元/kWh)",
+                    v=f"{market['min']:.4f} ~ {market['max']:.4f}（月均 {market['avg']:.4f}）",
+                    d=f"市场化电价，{market['distinct']} 个价格点位逐 15min 结算，无固定档位",
+                )
+            else:
+                row = dict(row, v=" / ".join(f"{p:.4f}" for p in sorted(t["price"] for t in tou)))
         elif row["k"].startswith("上网电价"):
             row = dict(row, v=f"{sale_price:.4f}（余电上网）" if sale_price is not None else "否")
         param_rows.append(row)
@@ -638,8 +750,10 @@ def build(station_dir):
         "cyc_sim": cyc_sim, "cyc_real": cyc_real, "net": net,
         "st_time": st_time, "st_volume": st_volume,
         "pv_volume": pv_volume, "pv_price": pv_price,
-        "tou": tou, "sale": sale_price, "cw": charge_weighted, "dw": discharge_weighted,
+        "tou": tou, "price_mode": price_mode, "market": market,
+        "sale": sale_price, "cw": charge_weighted, "dw": discharge_weighted,
         "spread": spread, "charge_cost": charge_cost, "discharge_income": discharge_income,
+        "station": station_name,
     }
 
 
@@ -654,16 +768,22 @@ def main():
         f.write(content)
     sm, rm = summary["sm"], summary["rm"]
     print(f"已写出 {out_path}")
+    print(f"站点 {summary['station']}　电价机制 {summary['price_mode']}")
     print("—— 口径校验 ——")
     print(f"总收益      仿真 {sm['total_profit']:.4f} / 实际 {rm['total_profit']:.4f}（报表总计 {rm['total_profit']:.4f}）")
     print(f"储能收益差  {sm['storage_profit'] - rm['storage_profit']:.4f}，其中时段效应 {summary['st_time']:.2f} / 电量效应 {summary['st_volume']:.2f}")
     print(f"光伏收益差  {sm['pv_profit'] - rm['pv_profit']:.4f}，其中量效应 {summary['pv_volume']:.2f} / 价效应 {summary['pv_price']:.2f}")
     print(f"净差额      {summary['net']:.4f}（两项相抵）")
     print(f"等效循环    仿真 {summary['cyc_sim']:.3f} / 实际 {summary['cyc_real']:.3f}")
-    print("—— 分时档位（由记录 import_price 推导）——")
-    for t in summary["tou"]:
-        wins = "、".join(f"{a*15//60:02d}:{a*15%60:02d}–{b*15//60:02d}:{b*15%60:02d}" for a, b in t["ranges"])
-        print(f"  {t['key']:9s} {t['price']:>7.4f} 元/kWh  {t['hours']:>4.1f} h/日  {wins}")
+    if summary["price_mode"] == "market":
+        mk = summary["market"]
+        print("—— 市场化电价（逐 15min 变价，无档位）——")
+        print(f"  区间 {mk['min']:.4f} ~ {mk['max']:.4f} 元/kWh，时间加权均价 {mk['avg']:.4f}，变价点位 {mk['distinct']} 个")
+    else:
+        print("—— 分时档位（由记录 import_price 推导）——")
+        for t in summary["tou"]:
+            wins = "、".join(f"{a*15//60:02d}:{a*15%60:02d}–{b*15//60:02d}:{b*15%60:02d}" for a, b in t["ranges"])
+            print(f"  {t['key']:9s} {t['price']:>7.4f} 元/kWh  {t['hours']:>4.1f} h/日  {wins}")
     print("—— 电价读数（仿真侧按逐 15min 电价加权）——")
     print(f"充电成本 {summary['charge_cost']:.4f} 元 → 加权电价 {summary['cw']:.6f} 元/kWh")
     print(f"放电收益 {summary['discharge_income']:.4f} 元 → 加权电价 {summary['dw']:.6f} 元/kWh")

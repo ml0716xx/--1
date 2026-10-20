@@ -128,7 +128,7 @@ function SectionPreview({ id }: { id: string }) {
                 <div key={c.name}>
                   <div className="text-[10px] text-gray-400">{c.name}</div>
                   <div className="text-xs font-black font-mono text-gray-700">
-                    {nf(c.real, decimalsFor(c.unit))}
+                    {nf(c.real, c.name === '综合度电成本' ? 4 : decimalsFor(c.unit))}
                     <span className="text-[9px] font-normal text-gray-400 ml-0.5">{c.unit}</span>
                   </div>
                 </div>
@@ -319,7 +319,7 @@ function SectionPreview({ id }: { id: string }) {
               </div>
               <div>
                 <div className="text-[9px] font-bold text-gray-400">
-                  {CASE_DAY_TEXT.readingTitle}
+                  {CASE_DAY_TEXT.dataTitle}
                 </div>
                 <div className="text-[9px] text-gray-500 leading-relaxed mt-0.5">
                   {caseDayReading(caseDate)}

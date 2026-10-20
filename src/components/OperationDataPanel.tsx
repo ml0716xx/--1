@@ -9,15 +9,16 @@ import {
 } from 'recharts';
 import {
   SIM_META, KPI_CARDS, MONEY_ROWS, MONTHLY_ROWS, PRICE_MONTH,
+  PRICE_MODE,
   TOU_TIERS, CASE_DAY_DATES, CASE_DAY_ROWS, CASE_DAY_CURVES,
   CYCLE_ROWS, CYCLE_TOTAL, DAILY_HEADERS, DAILY_UNITS, DAILY_ROWS, DAILY_TOTAL,
   PARAM_ROWS
 } from './operationSimData';
 import {
-  SIM_SCENARIOS, VIEW_META, COPY, KPI_NOTE, MONEY_DIR, MONEY_NOTE,
+  SIM_SCENARIOS, VIEW_META, COPY, MONEY_NOTE,
   WHY_ITEMS, WHY_CONCLUSIONS, MONTHLY_NOTE, MONTHLY_FOOTNOTE,
   CASE_DAY_TEXT, DAILY_TEXT, CYCLE_TEXT, PRICE_TEXT, PRICE_ROWS,
-  TOU_LABELS, tierWindow, caseDayReading, otherCaseDays,
+  TOU_LABELS,
   CAPACITY_ITEMS, COL_LABELS, PUSH_COPY,
 } from './operationSimCopy';
 import { PushReportModal } from './PushReportModal';
@@ -79,6 +80,9 @@ const decimalsFor = (unit: string) => {
   if (unit === '%') return 2;
   return 0;
 };
+/** 卡片读数小数位：综合度电成本量级小，3 位看不出对比，固定 4 位 */
+const kpiDecimals = (c: { name: string; unit: string }) =>
+  c.name === '综合度电成本' ? 4 : decimalsFor(c.unit);
 
 /* ---------- 分时档位色带（档位与电价取自数据层，颜色与中文名在此配） ---------- */
 const TOU_COLORS: Record<string, string> = {
@@ -88,74 +92,6 @@ const TOU_COLORS: Record<string, string> = {
   peak: '#f87171',
 };
 
-
-/** 24h 档位色带：必须按时间顺序排（不能按档位顺序，否则色带时序错乱） */
-const TOU_SEGMENTS = TOU_TIERS
-  .flatMap(t => t.ranges.map(([a, b]) => ({ key: t.key, price: t.price, a, b })))
-  .sort((x, y) => x.a - y.a);
-
-/* ---------------------------- 电价口径条 ---------------------------- */
-/** 三视图共用：购电分时四档（含时段窗口）+ 售电（余电上网）单价 + 可选的当期加权电价读数。只排版，数字来自数据层。 */
-function PriceStrip({ readouts }: { readouts?: { label: string; value: string }[] }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center space-x-2">
-        <span className="w-1 h-3.5 bg-slate-400 rounded-full" />
-        <h3 className="text-xs font-bold text-gray-700">{PRICE_TEXT.stripTitle}</h3>
-      </div>
-
-      <div className="flex items-start flex-wrap gap-x-4 gap-y-1.5">
-        <span className="text-[11px] text-gray-400 shrink-0">{PRICE_TEXT.purchaseLabel}</span>
-        {TOU_TIERS.map(t => (
-          <span key={t.key} className="flex items-center space-x-1.5 text-[11px] text-gray-600">
-            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: TOU_COLORS[t.key] }} />
-            <span className="font-bold">{TOU_LABELS[t.key]}</span>
-            <span className="font-mono">{t.price.toFixed(4)}</span>
-            <span className="text-gray-400">{tierWindow(t.ranges)}</span>
-          </span>
-        ))}
-      </div>
-
-      <div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 border-t border-gray-100 pt-2">
-        <span className="text-[11px] text-gray-400 shrink-0">{PRICE_TEXT.saleLabel}</span>
-        <span className="flex items-center space-x-1.5 text-[11px] text-gray-600">
-          <span className="w-2.5 h-2.5 rounded-sm bg-slate-400 shrink-0" />
-          <span className="font-mono font-bold">
-            {PRICE_MONTH.sale === null ? '—' : PRICE_MONTH.sale.toFixed(4)}
-          </span>
-          <span>{PRICE_TEXT.unit}</span>
-        </span>
-        <span className="text-[11px] text-gray-400">{PRICE_TEXT.saleNote}</span>
-        {readouts && readouts.length > 0 && (
-          <span className="flex items-center flex-wrap gap-x-3 gap-y-1 md:ml-auto">
-            {readouts.map(r => (
-              <span key={r.label} className="flex items-center space-x-1 text-[11px]">
-                <span className="text-gray-400">{r.label}</span>
-                <span className="font-mono font-bold text-blue-600">{r.value}</span>
-              </span>
-            ))}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** 按月电价读数（收益差额构成、月度指标对比用） */
-const monthPriceReadouts = () => [
-  {
-    label: PRICE_TEXT.chargeWeighted,
-    value: PRICE_MONTH.chargeWeighted === null ? '—' : PRICE_MONTH.chargeWeighted.toFixed(4),
-  },
-  {
-    label: PRICE_TEXT.dischargeWeighted,
-    value: PRICE_MONTH.dischargeWeighted === null ? '—' : PRICE_MONTH.dischargeWeighted.toFixed(4),
-  },
-  {
-    label: PRICE_TEXT.spread,
-    value: PRICE_MONTH.spread === null ? '—' : PRICE_MONTH.spread.toFixed(4),
-  },
-];
 
 /* ============================ 子视图 1：收益差额构成 ============================ */
 function MoneyView() {
@@ -213,11 +149,6 @@ function MoneyView() {
         </p>
       </div>
 
-      {/* 电价口径：差额由价差与时段结构产生，先把两侧采用的电价摆出来 */}
-      <div className="bg-white px-5 py-3.5 rounded-xl border border-gray-200 shadow-sm">
-        <PriceStrip readouts={monthPriceReadouts()} />
-      </div>
-
       {/* 分项对比 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
@@ -231,31 +162,26 @@ function MoneyView() {
               <th className="text-right px-3 py-2.5 font-semibold">{COL_LABELS.actual}</th>
               <th className="text-right px-3 py-2.5 font-semibold">{COL_LABELS.sim}</th>
               <th className="text-right px-3 py-2.5 font-semibold">差额</th>
-              <th className="text-left px-3 py-2.5 font-semibold w-[92px]">方向</th>
               <th className="text-left px-5 py-2.5 font-semibold">说明</th>
             </tr>
           </thead>
           <tbody>
-            {MONEY_ROWS.map((r, i) => {
+            {MONEY_ROWS.map(r => {
               const key = copyKey(r.item);
-              const isLast = i === MONEY_ROWS.length - 1;
-              const tone = isLast ? 'flat' : toneOf(r.diff);
+              // 合计行单独着色（不再按「最后一行」判断，末行已换成总收益）
+              const isTotal = key === '总收益';
+              const tone = isTotal ? 'flat' : toneOf(r.diff);
               return (
-                <tr key={r.item} className={`border-t border-gray-100 ${i === 2 ? 'bg-blue-50/40' : ''}`}>
+                <tr key={r.item} className={`border-t border-gray-100 ${isTotal ? 'bg-blue-50/40' : ''}`}>
                   <td className="px-5 py-3 font-semibold text-gray-800 whitespace-nowrap">{r.item}</td>
                   <td className="px-3 py-3 text-right font-mono text-gray-700">
-                    {isLast ? '—' : nf(r.real as number, 2)}
+                    {nf(r.real as number, 2)}
                   </td>
                   <td className="px-3 py-3 text-right font-mono text-gray-700">
-                    {isLast ? '—' : nf(r.sim as number, 2)}
+                    {nf(r.sim as number, 2)}
                   </td>
-                  <td className={`px-3 py-3 text-right font-mono font-bold ${isLast ? TONE_TEXT.flat : TONE_TEXT[tone]}`}>
-                    {isLast ? '+' + nf(r.diff, 3) : sf(r.diff, 2, '')}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold ${TONE_SOFT[isLast ? 'flat' : tone]}`}>
-                      {MONEY_DIR[key]}
-                    </span>
+                  <td className={`px-3 py-3 text-right font-mono font-bold ${isTotal ? TONE_TEXT.flat : TONE_TEXT[tone]}`}>
+                    {isTotal ? '+' + nf(r.diff, 3) : sf(r.diff, 2, '')}
                   </td>
                   <td className="px-5 py-3 text-gray-500 leading-relaxed">{MONEY_NOTE[key]}</td>
                 </tr>
@@ -282,11 +208,7 @@ function MoneyView() {
                 <span className={`font-mono font-black text-sm ${TONE_TEXT[r.tone]}`}>{r.amount}</span>
               </div>
               <div>
-                <div className="text-[11px] font-bold text-gray-400 mb-1">机制</div>
-                <p className="text-xs text-gray-600 leading-relaxed">{r.mechanism}</p>
-              </div>
-              <div>
-                <div className="text-[11px] font-bold text-gray-400 mb-1">证据</div>
+                <div className="text-[11px] font-bold text-gray-400 mb-1">量价分解</div>
                 <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-line">{r.evidence}</p>
               </div>
             </div>
@@ -320,11 +242,7 @@ function MonthlyView() {
 
   return (
     <div className="space-y-4">
-      {/* 电价口径 */}
-      <div className="bg-white px-5 py-3.5 rounded-xl border border-gray-200 shadow-sm">
-        <PriceStrip />
-      </div>
-
+      {/* 电价口径条已按 2026-10-20 领导要求去掉；电价类指标仍在下方表格内逐行给出 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-bold text-gray-900 text-sm">月度指标对比（{SIM_META.period.split(' ~ ')[0].slice(0, 7)}）</h3>
@@ -489,7 +407,6 @@ function MonthlyView() {
             <span className="text-emerald-600 font-semibold">{DAILY_TEXT.devDown}</span>。
           </span>
           <span>{DAILY_TEXT.cycleNote}</span>
-          <span>{DAILY_TEXT.checkNote}</span>
         </div>
       </div>
     </div>
@@ -501,25 +418,25 @@ function DayView() {
   /** 案例日切换：默认取数据层第一个案例日（储能收益差最大） */
   const [date, setDate] = useState<string>(CASE_DAY_DATES[0]);
   const curve = CASE_DAY_CURVES[date] ?? [];
+  /** 电价曲线：购电取该 15min 的结算价（market 逐点变价 / tou 档位价），售电取余电上网单价（水平线） */
+  const chartData = useMemo(
+    () =>
+      curve.map(p => ({
+        ...p,
+        buyPrice: p.buy ?? TOU_TIERS.find(t => t.key === p.tier)?.price ?? null,
+        sellPrice: PRICE_MONTH.sale,
+      })),
+    [curve],
+  );
+  /** 档位标签：市场化电价没有档位，统一显示「市场化」 */
+  const tierLabel = (tier: string) => (PRICE_MODE === 'market' ? '市场化' : `${TOU_LABELS[tier]}段`);
   const rows = CASE_DAY_ROWS[date] ?? [];
-  const pick = (kw: string) => rows.find(r => r.name.startsWith(kw));
-  const ch = pick('储能充电量');
-  const dis = pick('储能放电量');
-  const cyc = pick('充放次数');
-  const cw = pick('充电加权电价');
-  const dw = pick('放电加权电价');
-  /** 实际运行侧当日无充放 → 曲线为 0 线，需给出说明 */
-  const realIdle = (ch?.real ?? 0) === 0 && (dis?.real ?? 0) === 0;
-  /** 当日电价读数：只有仿真侧算得出（实际侧报表未拆分成本与收益） */
-  const dayPriceReadouts = [
-    { label: PRICE_TEXT.chargeWeighted, value: cw?.sim === null || cw?.sim === undefined ? '—' : cw.sim.toFixed(4) },
-    { label: PRICE_TEXT.dischargeWeighted, value: dw?.sim === null || dw?.sim === undefined ? '—' : dw.sim.toFixed(4) },
-  ];
+  /** 指标拆两卡：名称含「元」的归金额侧（含收益与元/kWh 电价），其余归电量侧（含次数与率） */
+  const kwhRows = rows.filter(r => !r.name.includes('元'));
+  const moneyRows = rows.filter(r => r.name.includes('元'));
   /** 案例日表的取值精度：电价 4 位、率类 0 位、其余 2 位 */
   const decOf = (name: string) => (name.includes('电价') ? 4 : name.includes('率') ? 0 : 2);
 
-  const f1 = (v: number | undefined) => nf(v ?? 0, 1);
-  const f2 = (v: number | undefined) => nf(v ?? 0, 2);
   const pw = (v: number) => (v === 0 ? '0.0' : (v > 0 ? '+' : '') + v.toFixed(1));
   const pwTag = (v: number) => (v < 0 ? CASE_DAY_TEXT.pwState.charge : v > 0 ? CASE_DAY_TEXT.pwState.discharge : CASE_DAY_TEXT.pwState.idle);
 
@@ -554,15 +471,9 @@ function DayView() {
         <div className="px-5 pt-4">
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={curve} margin={{ top: 8, right: 20, left: -12, bottom: 0 }}>
+              <LineChart data={chartData} margin={{ top: 8, right: 20, left: -12, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 10, fill: '#9ca3af' }}
-                  axisLine={{ stroke: '#e5e7eb' }}
-                  tickLine={false}
-                  interval={7}
-                />
+                <XAxis dataKey="time" hide />
                 <YAxis
                   yAxisId="left"
                   domain={['auto', 'auto']}
@@ -587,7 +498,7 @@ function DayView() {
                     return (
                       <div className="bg-white p-3 border border-gray-200 shadow-xl rounded-lg text-xs space-y-1">
                         <div className="font-bold text-gray-800">
-                          {label}　<span className="text-gray-400 font-normal">{TOU_LABELS[p.tier]}段</span>
+                          {label}　<span className="text-gray-400 font-normal">{tierLabel(p.tier)}</span>
                         </div>
                         <div className="flex items-center justify-between space-x-4">
                           <span className="text-gray-500">{CASE_DAY_TEXT.legend.realPower}</span>
@@ -626,21 +537,91 @@ function DayView() {
           </div>
         </div>
 
-        {/* 24h 电价档位色带 */}
-        <div className="px-5 pb-4 space-y-2">
-          <div className="flex h-3 rounded-md overflow-hidden border border-gray-100">
-            {TOU_SEGMENTS.map((t, k) => (
-              <div
-                key={`${t.key}-${k}`}
-                title={`${TOU_LABELS[t.key]} ${String(Math.floor(t.a / 4)).padStart(2, '0')}:00–${String(Math.floor(t.b / 4)).padStart(2, '0')}:00　${t.price} 元/kWh`}
-                style={{ width: `${((t.b - t.a) / 96) * 100}%`, background: TOU_COLORS[t.key] }}
-              />
-            ))}
+        {/* 电价曲线：与主图共用时间轴，购电按档位走阶梯、售电为水平线 */}
+        <div className="px-5 pt-3">
+          <div className="flex items-center space-x-2 mb-1">
+            <span className="w-1 h-3 bg-slate-400 rounded-full" />
+            <span className="text-[11px] font-bold text-gray-700">
+              {PRICE_TEXT.stripTitle} · {PRICE_TEXT.unit}
+            </span>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-gray-400">
-            <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+          <div className="h-32 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 4, right: 58, left: -12, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                <XAxis
+                  dataKey="time"
+                  tick={{ fontSize: 10, fill: '#9ca3af' }}
+                  axisLine={{ stroke: '#e5e7eb' }}
+                  tickLine={false}
+                  interval={7}
+                />
+                <YAxis
+                  yAxisId="price"
+                  domain={[0.2, 1.2]}
+                  ticks={[0.4, 0.8, 1.2]}
+                  tickFormatter={(v: number) => v.toFixed(1)}
+                  tick={{ fontSize: 10, fill: '#9ca3af' }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={46}
+                />
+                {/* 右边界靠 margin-right 58 预留（20 边距 + 38 的 SOC 轴宽），保证与主图绘图区对齐 */}
+                <Tooltip
+                  content={({ active, payload, label }: any) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const p = payload[0].payload;
+                    return (
+                      <div className="bg-white p-2.5 border border-gray-200 shadow-xl rounded-lg text-xs space-y-1">
+                        <div className="font-bold text-gray-800">
+                          {label}　<span className="text-gray-400 font-normal">{tierLabel(p.tier)}</span>
+                        </div>
+                        <div className="flex items-center justify-between space-x-4">
+                          <span className="text-gray-500">{CASE_DAY_TEXT.legend.buyPrice}</span>
+                          <span className="font-mono font-bold text-slate-700">
+                            {p.buyPrice === null ? '—' : p.buyPrice.toFixed(4)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between space-x-4">
+                          <span className="text-gray-500">{CASE_DAY_TEXT.legend.sellPrice}</span>
+                          <span className="font-mono font-bold text-sky-600">
+                            {p.sellPrice === null ? '—' : p.sellPrice.toFixed(4)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                <Line
+                  yAxisId="price"
+                  /* 分时电价走阶梯；市场化电价逐 15min 变价，用折线 */
+                  type={PRICE_MODE === 'market' ? 'monotone' : 'stepAfter'}
+                  dataKey="buyPrice"
+                  name={CASE_DAY_TEXT.legend.buyPrice}
+                  stroke="#334155"
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+                <Line
+                  yAxisId="price"
+                  type="monotone"
+                  dataKey="sellPrice"
+                  name={CASE_DAY_TEXT.legend.sellPrice}
+                  stroke="#0ea5e9"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 3"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
-          <div className="flex items-center space-x-4 flex-wrap pt-0.5">
+        </div>
+
+        {/* 图例：档位色带已由电价折线取代（时间轴与档位水平都由下方电价图给出） */}
+        <div className="px-5 pb-4 pt-1">
+          <div className="flex items-center space-x-4 flex-wrap">
             <span className="flex items-center space-x-1.5 text-[11px] text-gray-500">
               <span className="w-4 h-0.5 bg-slate-400" /><span>{CASE_DAY_TEXT.legend.realPower}{CASE_DAY_TEXT.powerNote}</span>
             </span>
@@ -650,88 +631,59 @@ function DayView() {
             <span className="flex items-center space-x-1.5 text-[11px] text-gray-500">
               <span className="w-4 h-0.5 bg-amber-500" style={{ borderTop: '1px dashed' }} /><span>SOC</span>
             </span>
+            <span className="flex items-center space-x-1.5 text-[11px] text-gray-500">
+              <span className="w-4 h-0.5 bg-slate-700" /><span>{CASE_DAY_TEXT.legend.buyPrice}</span>
+            </span>
+            <span className="flex items-center space-x-1.5 text-[11px] text-gray-500">
+              <span className="w-4 h-0.5 bg-sky-500" style={{ borderTop: '1px dashed' }} /><span>{CASE_DAY_TEXT.legend.sellPrice}</span>
+            </span>
           </div>
-        </div>
-
-        {/* 电价口径：档位价与时段窗口 + 售电单价 + 当日加权电价（增益差额即由这套电价产生） */}
-        <div className="px-5 py-3 border-t border-gray-100">
-          <PriceStrip readouts={dayPriceReadouts} />
-        </div>
-
-        {/* 曲线口径说明 */}
-        <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/50 text-[11px] text-gray-500 leading-relaxed">
-          {CASE_DAY_TEXT.curveCaliber}
-          {realIdle && <span className="ml-1 text-amber-600">{CASE_DAY_TEXT.idleNote(ch?.real ?? 0, dis?.real ?? 0)}</span>}
-        </div>
-
-        <div className="px-5 py-3 border-t border-gray-100 flex items-center space-x-6 flex-wrap text-[11px] text-gray-500">
-          <span>
-            {CASE_DAY_TEXT.footLabels.charge} {CASE_DAY_TEXT.footLabels.real}{' '}
-            <span className="font-mono font-bold text-gray-800">{f1(ch?.real)}</span> / {CASE_DAY_TEXT.footLabels.sim}
-            <span className="font-mono font-bold text-gray-800"> {f1(ch?.sim)}</span> kWh
-          </span>
-          <span>
-            {CASE_DAY_TEXT.footLabels.discharge} {CASE_DAY_TEXT.footLabels.real}{' '}
-            <span className="font-mono font-bold text-gray-800">{f1(dis?.real)}</span> / {CASE_DAY_TEXT.footLabels.sim}
-            <span className="font-mono font-bold text-gray-800"> {f1(dis?.sim)}</span> kWh
-          </span>
-          <span>
-            {CYCLE_TEXT.label} {CASE_DAY_TEXT.footLabels.real}{' '}
-            <span className="font-mono font-bold text-gray-800">{f2(cyc?.real)}</span> / {CASE_DAY_TEXT.footLabels.sim}
-            <span className="font-mono font-bold text-gray-800"> {f2(cyc?.sim)}</span> {CYCLE_TEXT.unit}
-          </span>
-          <span>{CASE_DAY_TEXT.socNote}</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <h3 className="font-bold text-gray-900 text-sm">{CASE_DAY_TEXT.tableTitle} · {date}</h3>
+      {/* 案例日指标拆两卡：左电量与效率、右收益与电价，脚注随各自卡片 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {[
+          { key: 'kwh', title: CASE_DAY_TEXT.energyTitle, list: kwhRows, note: CYCLE_TEXT.caseNote },
+          { key: 'money', title: CASE_DAY_TEXT.moneyTitle, list: moneyRows, note: CASE_DAY_TEXT.priceNote },
+        ].map(g => (
+          <div key={g.key} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 text-sm">{g.title}</h3>
+              <span className="text-[11px] text-gray-400">{date}</span>
+            </div>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50/70 text-gray-500">
+                  <th className="text-left px-4 py-2 font-semibold">{COL_LABELS.item}</th>
+                  <th className="text-right px-3 py-2 font-semibold">{COL_LABELS.actual}</th>
+                  <th className="text-right px-3 py-2 font-semibold">{COL_LABELS.sim}</th>
+                  <th className="text-right px-4 py-2 font-semibold">{COL_LABELS.diff}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.list.map(r => {
+                  const isCycle = r.name.startsWith(CYCLE_TEXT.label);
+                  return (
+                    <tr key={r.name} className={`border-t border-gray-100 ${isCycle ? 'bg-blue-50/40' : ''}`}>
+                      <td className={`px-4 py-2 ${isCycle ? 'font-bold text-gray-800' : 'text-gray-700'}`}>{r.name}</td>
+                      <td className={`px-3 py-2 text-right font-mono ${r.real === null ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {nf(r.real, decOf(r.name))}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-gray-700">{nf(r.sim, decOf(r.name))}</td>
+                      <td className={`px-4 py-2 text-right font-mono font-bold ${r.diff === 0 ? 'text-gray-400' : TONE_TEXT[toneOf(r.diff ?? 0)]}`}>
+                        {r.diff === null ? '—' : r.diff === 0 ? '0' : sf(r.diff, 2, '')}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/50 text-[11px] text-gray-500 leading-relaxed">
+              {g.note}
+            </div>
           </div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-gray-50/70 text-gray-500">
-                <th className="text-left px-4 py-2 font-semibold">{COL_LABELS.item}</th>
-                <th className="text-right px-3 py-2 font-semibold">{COL_LABELS.actual}</th>
-                <th className="text-right px-3 py-2 font-semibold">{COL_LABELS.sim}</th>
-                <th className="text-right px-4 py-2 font-semibold">{COL_LABELS.diff}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => {
-                const isCycle = r.name.startsWith(CYCLE_TEXT.label);
-                return (
-                  <tr key={r.name} className={`border-t border-gray-100 ${isCycle ? 'bg-blue-50/40' : ''}`}>
-                    <td className={`px-4 py-2 ${isCycle ? 'font-bold text-gray-800' : 'text-gray-700'}`}>{r.name}</td>
-                    <td className={`px-3 py-2 text-right font-mono ${r.real === null ? 'text-gray-300' : 'text-gray-700'}`}>
-                      {nf(r.real, decOf(r.name))}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-gray-700">{nf(r.sim, decOf(r.name))}</td>
-                    <td className={`px-4 py-2 text-right font-mono font-bold ${r.diff === 0 ? 'text-gray-400' : TONE_TEXT[toneOf(r.diff ?? 0)]}`}>
-                      {r.diff === null ? '—' : r.diff === 0 ? '0' : sf(r.diff, 2, '')}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/50 text-[11px] text-gray-500 space-y-1">
-            <div>{CYCLE_TEXT.caseNote}</div>
-            <div>{CASE_DAY_TEXT.priceNote}</div>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-          <div>
-            <div className="text-[11px] font-bold text-gray-400 mb-1">{CASE_DAY_TEXT.readingTitle}</div>
-            <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-line">{caseDayReading(date)}</p>
-          </div>
-          <div className="border-t border-gray-100 pt-3">
-            <div className="text-[11px] font-bold text-gray-400 mb-1">{CASE_DAY_TEXT.othersTitle}</div>
-            <p className="text-xs text-gray-600 leading-relaxed">{otherCaseDays(date)}</p>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );
@@ -875,12 +827,12 @@ export function OperationDataPanel({ station }: { station?: any }) {
           <h3 className="text-xs font-bold text-gray-700">{COPY.standardTitle}</h3>
           <span className="text-[11px] text-gray-400">{SIM_META.period} · {COPY.standardHint}</span>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {KPI_CARDS.map(c => (
             <div key={c.name} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
               <div className="text-[11px] text-gray-500 font-semibold">{c.name}</div>
               <div className="text-lg font-black font-mono mt-1 text-gray-800">
-                {nf(c.real, decimalsFor(c.unit))}
+                {nf(c.real, kpiDecimals(c))}
                 <span className="text-[10px] font-normal text-gray-400 ml-1">{c.unit}</span>
               </div>
             </div>
@@ -978,22 +930,30 @@ export function OperationDataPanel({ station }: { station?: any }) {
                 <span>{PUSH_COPY.action}</span>
               </button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+            {/* 8 张卡：4 列两行。7 列会让每张过窄，指标名与数值挤在一起 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {KPI_CARDS.map(c => {
-                const dec = decimalsFor(c.unit);
+                const dec = kpiDecimals(c);
                 const tone = c.dir === 'up' ? 'up' : 'down';
                 return (
                   <div key={c.name} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                    <div className="text-[11px] text-gray-500 font-semibold">{c.name}</div>
-                    <div className={`text-lg font-black font-mono mt-1 ${TONE_TEXT[tone]}`}>
-                      {nf(c.sim, dec)}
-                      <span className="text-[10px] font-normal text-gray-400 ml-1">{c.unit}</span>
+                    {/* 两行版式：指标名 + 涨跌标记同行，仿真值 + 实际值同行 */}
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] text-gray-500 font-semibold">{c.name}</div>
+                      <div className="flex items-center space-x-0.5">
+                        {c.dir === 'up' ? <ArrowUpRight size={11} className="text-red-500" /> : <ArrowDownRight size={11} className="text-emerald-500" />}
+                        <span className={`text-[11px] font-bold font-mono ${TONE_TEXT[tone]}`}>{c.dev}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-1 mt-1">
-                      {c.dir === 'up' ? <ArrowUpRight size={12} className="text-red-500" /> : <ArrowDownRight size={12} className="text-emerald-500" />}
-                      <span className={`text-xs font-bold font-mono ${TONE_TEXT[tone]}`}>{c.dev}</span>
+                    <div className="flex items-baseline justify-between mt-1.5">
+                      <div className={`text-lg font-black font-mono ${TONE_TEXT[tone]}`}>
+                        {nf(c.sim, dec)}
+                        <span className="text-[10px] font-normal text-gray-400 ml-1">{c.unit}</span>
+                      </div>
+                      <div className="text-[10px] text-gray-400 font-mono whitespace-nowrap">
+                        实际 {nf(c.real, dec)}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-gray-400 mt-1.5 leading-snug">{KPI_NOTE[c.name]}</div>
                   </div>
                 );
               })}

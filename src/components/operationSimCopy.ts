@@ -12,6 +12,10 @@ import {
   ATTRIB_DATA,
   CAP_KWH,
   CASE_DAY_ROWS,
+  DAILY_HEADERS,
+  DAILY_ROWS,
+  MARKET_PRICE,
+  PRICE_MODE,
   PRICE_MONTH,
   SIM_META,
   TOU_TIERS,
@@ -20,7 +24,6 @@ import {
 /* ---------------------------- 数字格式化 ---------------------------- */
 const n0 = (v: number) => Math.round(v).toLocaleString('zh-CN');
 const n1 = (v: number) => v.toLocaleString('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const n2 = (v: number) => v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const n3 = (v: number) => v.toLocaleString('zh-CN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const n4 = (v: number) => v.toLocaleString('zh-CN', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 /** 带符号整数金额 */
@@ -54,20 +57,8 @@ export const SIM_SCENARIOS: SimScenario[] = [
     benchmark: '站点实际运行',
     status: 'ready',
   },
-  {
-    id: 'manual_replay',
-    name: '人工策略回放',
-    desc: '按人工制定的充放电计划回算收益，用于评估现场执行策略',
-    benchmark: '站点实际运行',
-    status: 'planned',
-  },
-  {
-    id: 'multi_strategy',
-    name: '多策略比选',
-    desc: '多个候选策略并列计算，输出推荐方案与量化差异',
-    benchmark: '站点实际运行',
-    status: 'planned',
-  },
+  // 「人工策略回放」「多策略比选」已按 2026-10-20 领导要求从本期范围去掉，不要再加回。
+  // 场景注册表结构保留（status 仍支持 'planned'），后续新增场景直接追加一条即可。
 ];
 
 /* ---------------------------- 设备容量项 ---------------------------- */
@@ -105,22 +96,28 @@ export const tierWindow = (ranges: [number, number][]) =>
   ranges.map(([a, b]) => `${slotHM(a)}–${slotHM(b)}`).join('、');
 
 /* ---------------------------- 电价口径 ---------------------------- */
+/** 电价机制来自数据层：tou = 固定分时档位，market = 市场化（现货/中长期）逐 15min 变价 */
+const isMarket = PRICE_MODE === 'market';
 const purchasePrices = TOU_TIERS.map(t => t.price);
-const purchaseLow = Math.min(...purchasePrices);
-const purchaseHigh = Math.max(...purchasePrices);
-/** 购电分时四档的紧凑写法，如「谷 0.3096 / 平 0.6489 / 肩 0.9884 / 峰 1.1337」 */
-const purchaseTierText = TOU_TIERS.map(t => `${TOU_LABELS[t.key]} ${n4(t.price)}`).join(' / ');
+const purchaseLow = isMarket ? (MARKET_PRICE?.min ?? 0) : Math.min(...purchasePrices);
+const purchaseHigh = isMarket ? (MARKET_PRICE?.max ?? 0) : Math.max(...purchasePrices);
+/** 购电价格的紧凑写法：分时站列四档，市场化站列区间 + 均价 + 变价点位数 */
+const purchaseTierText = isMarket
+  ? `${n4(purchaseLow)} ~ ${n4(purchaseHigh)}，时间加权均价 ${n4(MARKET_PRICE?.avg ?? 0)}，${MARKET_PRICE?.distinct ?? 0} 个价格点位`
+  : TOU_TIERS.map(t => `${TOU_LABELS[t.key]} ${n4(t.price)}`).join(' / ');
 
 export const PRICE_TEXT = {
   stripTitle: '电价口径',
-  purchaseLabel: '购电电价（分时）',
+  /** 购电价标签随机制变：分时站写「分时」，市场化站写「市场化」 */
+  purchaseLabel: isMarket ? '购电电价（市场化）' : '购电电价（分时）',
   saleLabel: '售电电价（余电上网）',
   groupLabel: '电价类',
   saleNote: '余电上网结算单价，两侧同口径',
   chargeWeighted: '充电加权电价',
   dischargeWeighted: '放电加权电价',
   spread: '充放电毛价差',
-  spreadNote: '放电加权电价 − 充电加权电价',
+  // 收益差额构成里的「充放电加权电价」块已按 2026-10-20 领导要求整块去掉，
+  // weightedTitle / weightedNote / spreadNote 随之删除；月度指标对比与推送弹窗仍在用上面三个标签。
   unit: '元/kWh',
   /** 实际侧没有加权电价时的说明（报表为日粒度，未拆分充电成本与放电收益） */
   noRealNote: '实际运行报表为日粒度，未拆分充电成本与放电收益，实际侧不计算加权电价',
@@ -153,7 +150,9 @@ export const PRICE_ROWS: PriceRow[] = [
     diff: '—',
     rel: '—',
     tone: 'flat',
-    note: `站点固定分时四档：${purchaseTierText}，两侧同价`,
+    note: isMarket
+      ? `市场化购电：${purchaseTierText}，逐 15min 结算`
+      : `站点固定分时四档：${purchaseTierText}，两侧同价`,
   },
   {
     name: '售电电价 (元/kWh)',
@@ -180,7 +179,7 @@ export const PRICE_ROWS: PriceRow[] = [
     diff: '—',
     rel: '—',
     tone: 'flat',
-    note: '放电收益 ÷ 储能放电量；与充电加权电价之差即毛价差，是储能毛利的空间来源。',
+    note: '放电收益 ÷ 储能放电量；与充电加权电价之差即毛价差。',
   },
 ];
 
@@ -289,8 +288,7 @@ export const COPY = {
   bridgeTitle: '差额构成：实际运行 → 仿真调度',
   bridgeNote:
     '红色为正向差额（仿真高于实际），绿色为负向差额（仿真低于实际）。' +
-    `储能 ${sg0(A.storage.diff)} 元、光伏 ${sg0(A.pv.diff)} 元，两项相抵后净增 ${n0(A.net)} 元。` +
-    '基准柱与差额柱采用不同量程，不按同一标尺比较柱高。',
+    `储能 ${sg0(A.storage.diff)} 元、光伏 ${sg0(A.pv.diff)} 元，两项合计净增 ${n0(A.net)} 元。`,
   bridgeRows: ['实际运行', '储能收益差', '光伏收益差', '仿真运行'],
 
   /* 分项对比 */
@@ -303,15 +301,8 @@ export const COPY = {
 } as const;
 
 /* ---------------------------- 指标卡说明 ---------------------------- */
-export const KPI_NOTE: Record<string, string> = {
-  总收益: '储能 +27,397 元，光伏 -6,310 元',
-  储能收益: '收益差额主来源，+27,397 元',
-  光伏收益: '余电去向结构变化所致',
-  单位放电净收益: '储能收益 ÷ 储能放电量',
-  等效循环: '月充电量 ÷ 储能容量 2,088 kWh',
-  储能利用率: '放电量 ÷ 充电量，两侧同口径',
-  日均充放次数: '月充电量 ÷ 储能容量 ÷ 天数（与等效循环同口径）',
-};
+// 2026-10-20 领导要求：仿真效果卡片去掉二级指标说明，改为主数值右侧并列实际值作对比。
+// 卡片结构仅剩「指标名 / 仿真值 + 实际值 / 偏差」，此处不再维护逐卡说明文案。
 
 /* ---------------------------- 充放次数口径 ---------------------------- */
 /** 四处位置共用同一口径说明，避免同一指标多种说法 */
@@ -327,18 +318,11 @@ export const CYCLE_TEXT = {
 };
 
 /* ---------------------------- 分项对比表 ---------------------------- */
-export const MONEY_DIR: Record<string, string> = {
-  储能收益: '仿真更高',
-  光伏收益: '仿真更低',
-  总收益: '净增',
-  单位放电净收益: '仿真更高',
-};
-
 export const MONEY_NOTE: Record<string, string> = {
-  储能收益: '占净差额 130%（以净差额绝对值为分母，单项可超过 100%）',
-  光伏收益: '余电去向结构变化：上网 +24,441 kWh、自用 -24,516 kWh；自用结算单价高于上网电价',
-  总收益: '储能 +27,397 元 + 光伏 -6,310 元 = +21,087 元（按日汇总校验一致）',
-  单位放电净收益: '储能收益 ÷ 储能放电量（两侧同口径表计值）。仿真 0.612 元/kWh，实际运行 0.276 元/kWh',
+  储能收益: `占净差额 ${n1(A.storage.share)}%（${sg0(A.storage.diff)} 元）`,
+  光伏收益: `上网 ${sg0(A.pv.exportDiff)} kWh、自用 ${sg0(A.pv.selfDiff)} kWh`,
+  总收益: `储能 ${sg0(A.storage.diff)} 元 + 光伏 ${sg0(A.pv.diff)} 元 = ${sg0(A.net)} 元`,
+  // 「单位放电净收益」行已按 2026-10-20 领导要求从分项对比表去掉（KPI 卡里仍保留该指标）
 };
 
 /* ---------------------------- 增量来源 ---------------------------- */
@@ -348,10 +332,8 @@ export const WHY_ITEMS = [
     title: '储能',
     amount: `${sg0(A.storage.diff)} 元`,
     tone: 'up',
-    mechanism: '低谷时段充电、高峰时段放电替代购电，收益来源为分时电价价差。',
     evidence:
-      `谷段（0.3096 元/kWh）网充 60,020 kWh；峰段（1.1337 元/kWh）放电 48,426 kWh，占全月放电量 74.9%。` +
-      `量价分解：单位放电净收益 ${n3(A.storage.unitReal)} → ${n3(A.storage.unitSim)} 元/kWh，` +
+      `单位放电净收益 ${n3(A.storage.unitReal)} → ${n3(A.storage.unitSim)} 元/kWh，` +
       `贡献 ${sg0(A.storage.timeEffect)} 元（${n0(stTimeShare)}%）；` +
       `放电量 ${n0(A.storage.dischargeReal)} → ${n0(A.storage.dischargeSim)} kWh，` +
       `贡献 ${sg0(A.storage.volumeEffect)} 元（${n0(stVolShare)}%）。`,
@@ -361,7 +343,6 @@ export const WHY_ITEMS = [
     title: '光伏',
     amount: `${sg0(A.pv.diff)} 元`,
     tone: 'down',
-    mechanism: '光伏电量结算单价取决于消纳去向：站内自用按购电电价抵扣，余电上网按上网电价结算。',
     evidence:
       `结算单价：自用 ${n4(A.pv.selfPrice)} 元/kWh，上网 ${n4(A.pv.exportPrice)} 元/kWh，单价差 ${n4(A.pv.priceGap)} 元/kWh。` +
       `仿真侧上网 ${sg0(A.pv.exportDiff)} kWh、自用 ${sg0(A.pv.selfDiff)} kWh。` +
@@ -377,24 +358,24 @@ export const WHY_CONCLUSIONS = [
   },
   {
     tag: '光伏',
-    text: `自用结算单价较上网电价高 ${n4(A.pv.priceGap)} 元/kWh，余电去向变化直接影响光伏收益。`,
+    text: `自用结算单价 ${n4(A.pv.selfPrice)} 元/kWh、上网电价 ${n4(A.pv.exportPrice)} 元/kWh，单价差 ${n4(A.pv.priceGap)} 元/kWh。`,
   },
 ];
 
 /* ---------------------------- 月度指标解读 ---------------------------- */
 /** 每条说明以计算式开头（与 MONTHLY_FOOTNOTE 的关系：此处给单项公式，页脚只给全局口径） */
 export const MONTHLY_NOTE: Record<string, string> = {
-  '光伏发电量 (kWh)': '计算式：15s 逆变器测点上报值做差值累计。两侧差值不足 0.1%，光伏输入一致。',
-  '上网电量 (kWh)': '计算式：15s 关口表测点上报值做差值累计，即余电送出量。仿真余电全部上网；实际运行存在自用消耗，差值主要来自策略取向。',
-  '自用电量 (kWh)': '计算式：自用电量 = 发电量 − 上网电量。与上网电量互为镜像：余电留站内计入自用，送出计入上网。',
-  '储能充电量 (kWh)': '计算式：15s 储能系统测点上报值做差值累计。月等效循环 仿真 34.9 次 / 实际 23.2 次（= 月充电量 ÷ 储能容量 2,088 kWh）。',
-  '储能放电量 (kWh)': '计算式：15s 储能系统测点上报值做差值累计。差 +20,552 kWh，仿真放电集中于峰值时段并优先供负荷，为储能收益差的第一层来源。',
-  '光伏收益 (元)': '计算式：光伏收益 = 上网电量 × 上网电价 0.3910 + 自用电量 × 自用结算单价 0.6941。上网与自用的结构决定结算单价，差异主要来自余电去向。',
-  '储能收益 (元)': '计算式：储能收益 = 放电收益 − 充电成本（逐 15min 按放电/充电电量 × 对应分时电价累加）。月度收益差主来源（+27,397 元）；充电加权电价 0.3706 元/kWh，单位放电净收益 仿真 0.612 / 实际 0.276 元/kWh。',
-  '限电止损收益 (元)': '计算式：限电止损收益 = 限电电量 × 上网电价 0.3910。全月无限电电量，该项为 0。',
-  '总收益 (元)': '计算式：总收益 = 储能收益 + 光伏收益 + 限电止损收益。储能 +27,397 元 + 光伏 −6,310 元 = +21,087 元。',
-  '自发自用率 (%)': '计算式：自发自用率 = 自用电量 ÷ 发电量 × 100%。仿真偏低对应余电上网比例更高，属策略取向差异，非效率问题。',
-  '储能利用率 (%)': '计算式：储能利用率 = 储能放电量 ÷ 储能充电量 × 100%。两侧 88.7% / 91.1%，差异来自充放电时段安排，而非利用充分度。',
+  '光伏发电量 (kWh)': '计算式：15s 逆变器测点上报值做差值累计。',
+  '上网电量 (kWh)': '计算式：15s 关口表测点上报值做差值累计，即余电送出量。',
+  '自用电量 (kWh)': '计算式：自用电量 = 发电量 − 上网电量。',
+  '储能充电量 (kWh)': `计算式：15s 储能系统测点上报值做差值累计。月等效循环 仿真 ${n1(A.storage.cycleSim)} 次 / 实际 ${n1(A.storage.cycleReal)} 次（= 月充电量 ÷ 储能容量 2,088 kWh）。`,
+  '储能放电量 (kWh)': `计算式：15s 储能系统测点上报值做差值累计。差 ${sg0(A.storage.dischargeDiff)} kWh。`,
+  '光伏收益 (元)': `计算式：光伏收益 = 上网电量 × 上网电价 ${n4(A.pv.exportPrice)} + 自用电量 × 自用结算单价 ${n4(A.pv.selfPrice)}。`,
+  '储能收益 (元)': `计算式：储能收益 = 放电收益 − 充电成本（逐 15min 按放电/充电电量 × 对应分时电价累加）。占净差额 ${n1(A.storage.share)}%（${sg0(A.storage.diff)} 元）；充电加权电价 ${n4(PRICE_MONTH.chargeWeighted ?? 0)} 元/kWh，单位放电净收益 仿真 ${n3(A.storage.unitSim)} / 实际 ${n3(A.storage.unitReal)} 元/kWh。`,
+  '限电止损收益 (元)': `计算式：限电止损收益 = 限电电量 × 上网电价 ${n4(A.pv.exportPrice)}。全月无限电电量，该项为 0。`,
+  '总收益 (元)': `计算式：总收益 = 储能收益 + 光伏收益 + 限电止损收益。储能 ${sg0(A.storage.diff)} 元 + 光伏 ${sg0(A.pv.diff)} 元 = ${sg0(A.net)} 元。`,
+  '自发自用率 (%)': '计算式：自发自用率 = 自用电量 ÷ 发电量 × 100%。',
+  '储能利用率 (%)': '计算式：储能利用率 = 储能放电量 ÷ 储能充电量 × 100%。',
   '日均充放次数 (次/日)': '计算式：日均充放次数 = 当月充电量 ÷ 储能容量 ÷ 当月天数（= 月等效循环 ÷ 天数）。' + CYCLE_TEXT.caliber,
 };
 
@@ -405,12 +386,12 @@ export const MONTHLY_FOOTNOTE =
 /* ---------------------------- 典型日 ---------------------------- */
 /** 案例日切换：日期来自数据层，标签与说明在此 */
 export const CASE_DAY_TEXT = {
-  rule: '案例日选取：按储能收益差排序取前 3，并排除“充放电量更高但收益更低”的反向日；另附 1 个反向日用于对照。',
-  /** 案例日标签（按日期） */
+  rule: '案例日选取：按储能收益差排序取前 3，另附 1 个总收益差为负的日子作对照。',
+  /** 案例日标签（按日期）；无额外标签的留空 */
   tags: {
     '2026-08-28': '差异最大',
-    '2026-08-12': '案例日',
-    '2026-08-27': '案例日',
+    '2026-08-12': '',
+    '2026-08-27': '',
     '2026-08-17': '反向日',
   } as Record<string, string>,
   chartTitle: '案例日逐 15min 充放电曲线',
@@ -420,49 +401,44 @@ export const CASE_DAY_TEXT = {
     simPower: '仿真 · 储能功率',
     realSoc: '实际运行 · SOC',
     simSoc: '仿真 · SOC',
+    buyPrice: '购电电价（分时）',
+    sellPrice: '售电电价（余电上网）',
   },
   /** 功率数值的正负含义（图例与 tooltip 共用） */
   powerNote: '（正放负充）',
   /** tooltip 里的功率状态词 */
   pwState: { charge: '充电', discharge: '放电', idle: '待机' },
-  /** 曲线口径：两侧来源与还原方式 */
-  curveCaliber:
-    '实际运行侧取当日表计电量并按分时档位还原到 15min；仿真侧取仿真结果原始 15min 序列。功率为正表示放电、为负表示充电。',
-  /** 实际运行侧当日无充放时的说明 */
-  idleNote: (charge: number, discharge: number) =>
-    `当日实际运行侧储能未动作（充电 ${n1(charge)} kWh、放电 ${n1(discharge)} kWh），实际运行曲线为 0 线。`,
+  // 曲线口径 / 电价曲线口径 / 实际侧未动作说明 / 图下读数标签，已按 2026-10-20 领导要求整块去掉，
+  // 不再维护 priceCurveNote / curveCaliber / idleNote / footLabels 四个字段。
   switchLabel: '案例日',
   axisPower: '储能功率 (kW)',
   axisSoc: 'SOC (%)',
   axisTier: '电价档位',
   tableTitle: '案例日两侧对照（日粒度）',
-  readingTitle: '判读要点',
-  readingGuide: '判读方法：先看充放电分别落在哪个电价档位，再比对两侧充放电量；若电量接近而收益差显著，差异来自时段结构。',
+  /** 案例日指标拆两卡：左侧电量与效率，右侧收益与电价 */
+  energyTitle: '电量指标',
+  moneyTitle: '收益与电价',
+  /** 案例日数据块标题（只承载数据行，不含判读/结论） */
+  dataTitle: '当日对照数据',
   othersTitle: '其余案例日',
-  socNote: 'SOC 全程落在 3%–98% 配置区间内。',
-  /** 图下读数行的标签（视图只负责拼数与排版） */
-  footLabels: { charge: '当日充电量', discharge: '当日放电量', real: '实际', sim: '仿真' },
   /** 案例日表的加权电价说明（放在表下） */
   priceNote:
     '充电/放电加权电价按逐 15min 电价加权（充电成本 ÷ 充电量、放电收益 ÷ 放电量）。' +
     '实际运行报表为日粒度，未拆分充电成本与放电收益，实际侧不计算。',
 };
 
-/** 案例日判读：按选中日期生成（数值取自数据层，句式固定） */
+/** 案例日判读：按选中日期生成（数值取自数据层，句式固定，只出数据不出结论） */
 export function caseDayReading(date: string): string {
   const rows = CASE_DAY_ROWS[date] ?? [];
   const pick = (kw: string) => rows.find(r => r.name.startsWith(kw));
   const ch = pick('储能充电量');
   const dis = pick('储能放电量');
   const st = pick('储能收益');
-  const cy = pick('充放次数');
   const cw = pick('充电加权电价');
   const dw = pick('放电加权电价');
   const lines = [
     `${date} 储能收益差 ${sg0(st?.diff ?? 0)} 元：充电量 实际 ${n1(ch?.real ?? 0)} / 仿真 ${n1(ch?.sim ?? 0)} kWh，放电量 实际 ${n1(dis?.real ?? 0)} / 仿真 ${n1(dis?.sim ?? 0)} kWh。`,
-    `充放次数 实际 ${n2(cy?.real ?? 0)} / 仿真 ${n2(cy?.sim ?? 0)} 次。`,
     `仿真侧充电加权电价 ${n4(cw?.sim ?? 0)} 元/kWh，放电加权电价 ${n4(dw?.sim ?? 0)} 元/kWh，毛价差 ${n4((dw?.sim ?? 0) - (cw?.sim ?? 0))} 元/kWh。`,
-    CASE_DAY_TEXT.readingGuide,
   ];
   return lines.join('\n');
 }
@@ -483,11 +459,10 @@ export function otherCaseDays(current: string): string {
 
 /* ---------------------------- 每日明细 ---------------------------- */
 export const DAILY_TEXT = {
-  title: '每日对比明细（31 天 × 10 项指标）',
+  title: `每日对比明细（${DAILY_ROWS.length} 天 × ${DAILY_HEADERS.length} 项指标）`,
   hint: '列序固定：收益类（总收益 / 储能 / 光伏）→ 电量类 → 效率类；每项含 实际运行 → 仿真 → 偏差%',
   devNote: '偏差% =（仿真 − 实际运行）÷ 实际运行；效率类指标不逐日给偏差；',
   devUp: '正值标红',
   devDown: '负值标绿',
-  checkNote: '合计行与月度指标对比同口径；逐日求和与合计行的差异应在日数 × 舍入误差以内。',
   cycleNote: CYCLE_TEXT.caliber,
 };
