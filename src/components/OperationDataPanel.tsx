@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Sparkles, RefreshCw, Calendar, CheckCircle2,
   Wallet, ArrowUpRight, ArrowDownRight, Activity, Target,
-  Sun, BatteryCharging, Cpu, Gauge, Send
+  Sun, BatteryCharging, Cpu, Gauge, Send, AlertTriangle
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -19,9 +19,10 @@ import {
   WHY_ITEMS, WHY_CONCLUSIONS, MONTHLY_NOTE, MONTHLY_FOOTNOTE,
   CASE_DAY_TEXT, DAILY_TEXT, CYCLE_TEXT, PRICE_TEXT, PRICE_ROWS,
   TOU_LABELS,
-  CAPACITY_ITEMS, COL_LABELS, PUSH_COPY,
+  CAPACITY_ITEMS, COL_LABELS, PUSH_COPY, PV_CHECK,
 } from './operationSimCopy';
 import { PushReportModal } from './PushReportModal';
+import { PvCheckModal } from './PvCheckModal';
 
 /* ==========================================================================
    运营数据 · 策略仿真
@@ -718,6 +719,42 @@ export function OperationDataPanel({ station }: { station?: any }) {
   const [pushOpen, setPushOpen] = useState(false);
   /** 推送结果提示 */
   const [toast, setToast] = useState<string | null>(null);
+  /** 光伏数据校对的每日对比弹层 */
+  const [pvOpen, setPvOpen] = useState(false);
+
+  /**
+   * 光伏数据校对：仿真的光伏发电量是后面所有对比的输入，输入对不上，结论就不用看。
+   * 差额率超阈值的日子单独标出来，让人一眼知道是哪几天把总账拉偏的。
+   * ?pvcheck=fail 是原型演示开关：把仿真侧按差额放大到 2%，连同每日明细一起放大，
+   * 保证告警条与弹层里的数字自洽，不会出现「说明超过 1% 但数只有 0.02%」这种演示事故。
+   */
+  const pvCheck = useMemo(() => {
+    const forceFail =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('pvcheck') === 'fail';
+
+    const idx = DAILY_HEADERS.indexOf('光伏发电量');
+
+    /* 逐日先算，再用逐日结果合计：演示态的抖动只作用在日粒度上，
+       合计由日数据加出来，保证告警条、弹层汇总、每日明细三处永远对得上。 */
+    const rows = DAILY_ROWS.map((r, i) => {
+      const real = Number(r[1 + idx * 3 + 1]) || 0;
+      const base = Number(r[1 + idx * 3]) || 0;
+      /* 演示用：模拟上游光伏输入偏小，偏差在 -4%~0 之间按日分布，不是整齐的 -2% */
+      const factor = forceFail ? 0.96 + ((i * 13) % 7) * 0.006 : 1;
+      const sim = base * factor;
+      const diff = sim - real;
+      return { date: String(r[0]), real, sim, diff, rate: real ? (diff / real) * 100 : null };
+    });
+
+    const sum = (k: 'real' | 'sim') => rows.reduce((acc, r) => acc + r[k], 0);
+    const total = { real: sum('real'), sim: sum('sim'), diff: 0, rate: null as number | null };
+    total.diff = total.sim - total.real;
+    total.rate = total.real ? (total.diff / total.real) * 100 : null;
+
+    const fail = Math.abs(total.rate ?? 0) > PV_CHECK.threshold || forceFail;
+    return { total, rows, fail };
+  }, []);
 
   const active = SIM_VIEWS.find(v => v.id === view) || SIM_VIEWS[0];
   const scenario = SIM_SCENARIOS.find(s => s.id === scenarioId) ?? SIM_SCENARIOS[0];
@@ -930,6 +967,47 @@ export function OperationDataPanel({ station }: { station?: any }) {
                 <span>{PUSH_COPY.action}</span>
               </button>
             </div>
+            {/* 光伏数据校对：输入对不上，后面 8 张卡和三个子视图都白看，所以放在卡片之前 */}
+            {pvCheck.fail ? (
+              <div className="mb-3 flex items-start gap-3 px-4 py-3 rounded-xl border border-amber-300 bg-amber-50">
+                <AlertTriangle size={16} className="text-amber-600 mt-px shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-amber-900">{PV_CHECK.failTitle}</div>
+                  <div className="text-[11px] text-amber-700 mt-0.5">
+                    {PV_CHECK.diffLabel} {sf(pvCheck.total.diff, 0, '')} {PV_CHECK.unit}
+                    <span className="mx-1 text-amber-400">·</span>
+                    {PV_CHECK.rateLabel} {sf(pvCheck.total.rate, 2)}
+                    <span className="mx-1 text-amber-400">·</span>
+                    已超过 {PV_CHECK.threshold}% 阈值
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPvOpen(true)}
+                  className="shrink-0 flex items-center space-x-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white transition"
+                >
+                  <span>{PV_CHECK.action}</span>
+                  <ArrowUpRight size={12} />
+                </button>
+              </div>
+            ) : (
+              <div className="mb-3 flex items-center gap-2 px-1">
+                <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                <span className="text-[11px] font-bold text-gray-700">{PV_CHECK.passLabel}</span>
+                <span className="text-[11px] text-gray-400 font-mono">
+                  {PV_CHECK.diffLabel} {sf(pvCheck.total.diff, 0, '')} {PV_CHECK.unit}
+                  <span className="mx-1 text-gray-300">·</span>
+                  {PV_CHECK.rateLabel} {sf(pvCheck.total.rate, 2)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPvOpen(true)}
+                  className="ml-auto text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline transition"
+                >
+                  {PV_CHECK.action}
+                </button>
+              </div>
+            )}
             {/* 8 张卡：4 列两行。7 列会让每张过窄，指标名与数值挤在一起 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {KPI_CARDS.map(c => {
@@ -1002,6 +1080,17 @@ export function OperationDataPanel({ station }: { station?: any }) {
           onPushed={handlePushed}
         />
       )}
+
+      {/* 光伏数据校对：每日对比 */}
+      <PvCheckModal
+        open={pvOpen}
+        onClose={() => setPvOpen(false)}
+        rows={pvCheck.rows}
+        total={pvCheck.total}
+        threshold={PV_CHECK.threshold}
+        nf={nf}
+        sf={sf}
+      />
 
       {/* 推送结果提示 */}
       {toast && (
