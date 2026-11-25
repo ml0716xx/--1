@@ -58,7 +58,6 @@ export function PvCheckModal({
               <AlertTriangle size={15} className="text-amber-500" />
               <span>{PV_CHECK.modalTitle}</span>
             </h3>
-            <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{PV_CHECK.modalHint}</p>
           </div>
           <button
             type="button"

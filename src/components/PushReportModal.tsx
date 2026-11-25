@@ -10,7 +10,7 @@
    ========================================================================== */
 
 import React, { useState } from 'react';
-import { X, Send, Square, CheckSquare, RefreshCw, Smartphone } from 'lucide-react';
+import { X, Send, RefreshCw, Smartphone } from 'lucide-react';
 import {
   SIM_META, KPI_CARDS, MONEY_ROWS, PARAM_ROWS, CASE_DAY_DATES, CASE_DAY_ROWS,
   TOU_TIERS, PRICE_MONTH,
@@ -305,7 +305,6 @@ function SectionPreview({ id }: { id: string }) {
                 </tbody>
               </table>
             </div>
-            <div className="text-[9px] text-gray-400 mt-1 leading-relaxed">{CYCLE_TEXT.caseNote}</div>
 
             {/* 其余案例日与判读方法 */}
             <div className="mt-2.5 pt-2 border-t border-gray-100 space-y-2">
@@ -353,33 +352,29 @@ export function PushReportModal({
   defaultSelected,
 }: PushReportModalProps) {
   const allIds = PUSH_SECTIONS.map(s => s.id);
-  const [selected, setSelected] = useState<string[]>(defaultSelected ?? allIds);
   const [pushing, setPushing] = useState(false);
 
   if (!isOpen) return null;
 
-  const toggle = (id: string) =>
-    setSelected(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
-
   const reportNo = `${PUSH_COPY.reportNoPrefix}-${SIM_META.period.slice(0, 7).replace('-', '')}-01`;
 
   const handlePush = () => {
-    if (selected.length === 0 || pushing) return;
+    if (pushing) return;
     setPushing(true);
     window.setTimeout(() => {
       setPushing(false);
-      onPushed(selected);
+      onPushed(allIds);
     }, 1200);
   };
 
-  /** 预览按注册表顺序渲染，不受勾选先后影响 */
-  const previewIds = allIds.filter(id => selected.includes(id));
+  /** 全量推送：预览固定为注册表里的全部章节 */
+  const previewIds = allIds;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-xs" onClick={onClose}></div>
 
-      <div className="relative bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-[1000px] h-[800px] max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-[560px] h-[800px] max-h-[92vh] flex flex-col overflow-hidden">
         {/* 标题 */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between shrink-0">
           <div>
@@ -398,88 +393,13 @@ export function PushReportModal({
           </button>
         </div>
 
-        {/* 主体：左选模块，右看效果 */}
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-          {/* 推送内容 */}
-          <div className="lg:w-[372px] shrink-0 border-b lg:border-b-0 lg:border-r border-gray-100 flex flex-col min-h-0">
-            <div className="px-5 py-3 flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-2">
-                <span className="w-1 h-3.5 bg-blue-500 rounded-full" />
-                <span className="text-xs font-bold text-gray-700">{PUSH_COPY.sectionTitle}</span>
-                <span className="text-[11px] text-gray-400">
-                  {PUSH_COPY.selectedPrefix} {selected.length} / {PUSH_SECTIONS.length}{' '}
-                  {PUSH_COPY.selectedUnit}
-                </span>
-              </div>
-              <div className="flex items-center space-x-1 text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setSelected(allIds)}
-                  className="px-1.5 py-1 rounded text-blue-600 hover:bg-blue-50 font-bold transition"
-                >
-                  {PUSH_COPY.selectAll}
-                </button>
-                <span className="text-gray-200">|</span>
-                <button
-                  type="button"
-                  onClick={() => setSelected([])}
-                  className="px-1.5 py-1 rounded text-gray-500 hover:bg-gray-50 font-bold transition"
-                >
-                  {PUSH_COPY.clearAll}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-4 space-y-2.5">
-              {PUSH_SECTIONS.map(s => {
-                const on = selected.includes(s.id);
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => toggle(s.id)}
-                    className={`w-full text-left p-3 rounded-xl border transition ${
-                      on
-                        ? 'border-blue-500 bg-blue-50/40'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-start space-x-2.5">
-                      <span className={`mt-0.5 shrink-0 ${on ? 'text-blue-600' : 'text-gray-300'}`}>
-                        {on ? <CheckSquare size={15} /> : <Square size={15} />}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs font-bold text-gray-800">{s.name}</span>
-                          <span className="text-[10px] text-gray-400">
-                            {s.items.length} {PUSH_COPY.itemUnit}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">{s.desc}</p>
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {s.items.map(it => (
-                            <span
-                              key={it}
-                              className="px-1.5 py-0.5 rounded bg-white border border-gray-200 text-[10px] text-gray-500"
-                            >
-                              {it}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
+        {/* 主体：用户端预览（三章全量） */}
+        <div className="flex-1 min-h-0 flex">
           {/* 用户端预览 */}
           <div className="flex-1 min-w-0 flex flex-col min-h-0">
             <div className="px-5 py-3 flex items-center space-x-2 shrink-0">
               <Smartphone size={13} className="text-gray-400" />
               <span className="text-xs font-bold text-gray-700">{PUSH_COPY.previewTitle}</span>
-              <span className="text-[11px] text-gray-400">{PUSH_COPY.previewHint}</span>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5 bg-gray-50/60">
@@ -543,9 +463,9 @@ export function PushReportModal({
             <button
               type="button"
               onClick={handlePush}
-              disabled={selected.length === 0 || pushing}
+              disabled={pushing}
               className={`flex items-center space-x-1.5 px-4 py-2 rounded-lg font-bold text-xs transition border ${
-                selected.length === 0 || pushing
+                pushing
                   ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm'
               }`}
