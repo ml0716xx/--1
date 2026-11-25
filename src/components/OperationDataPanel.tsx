@@ -16,7 +16,7 @@ import {
 } from './operationSimData';
 import {
   SIM_SCENARIOS, VIEW_META, COPY, MONEY_NOTE,
-  WHY_ITEMS, WHY_CONCLUSIONS, MONTHLY_NOTE,
+  WHY_ITEMS, WHY_CONCLUSIONS, MONTHLY_NOTE, MONTHLY_FOOTNOTE,
   CASE_DAY_TEXT, DAILY_TEXT, CYCLE_TEXT, PRICE_TEXT, PRICE_ROWS,
   TOU_LABELS,
   CAPACITY_ITEMS, COL_LABELS, PUSH_COPY, PV_CHECK,
@@ -144,6 +144,9 @@ function MoneyView() {
             );
           })}
         </div>
+        <p className="text-[11px] text-gray-500 leading-relaxed bg-gray-50 rounded-lg p-3 border border-gray-100">
+          {COPY.bridgeNote}
+        </p>
       </div>
 
       {/* 分项对比 */}
@@ -243,6 +246,7 @@ function MonthlyView() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-bold text-gray-900 text-sm">月度指标对比（{SIM_META.period.split(' ~ ')[0].slice(0, 7)}）</h3>
+          <span className="text-[11px] text-gray-400">偏差 =（仿真 − 实际运行）÷ 实际运行；效率类指标的绝对差以 pp（百分点）计</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs min-w-[900px]">
@@ -307,6 +311,9 @@ function MonthlyView() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50 text-[11px] text-gray-500 leading-relaxed">
+          {MONTHLY_FOOTNOTE}
         </div>
       </div>
 
@@ -395,9 +402,10 @@ function MonthlyView() {
         </div>
         <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/50 text-[11px] text-gray-500 flex items-center justify-between flex-wrap gap-2">
           <span>
-            <span className="text-red-600 font-semibold">{DAILY_TEXT.devUp}</span>、
-            <span className="text-emerald-600 font-semibold">{DAILY_TEXT.devDown}</span>
+            {DAILY_TEXT.devNote}<span className="text-red-600 font-semibold">{DAILY_TEXT.devUp}</span>、
+            <span className="text-emerald-600 font-semibold">{DAILY_TEXT.devDown}</span>。
           </span>
+          <span>{DAILY_TEXT.cycleNote}</span>
         </div>
       </div>
     </div>
@@ -634,7 +642,7 @@ function DayView() {
       {/* 案例日指标拆两卡：左电量与效率、右收益与电价，脚注随各自卡片 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         {[
-          { key: 'kwh', title: CASE_DAY_TEXT.energyTitle, list: kwhRows, note: '' },
+          { key: 'kwh', title: CASE_DAY_TEXT.energyTitle, list: kwhRows, note: CYCLE_TEXT.caseNote },
           { key: 'money', title: CASE_DAY_TEXT.moneyTitle, list: moneyRows, note: CASE_DAY_TEXT.priceNote },
         ].map(g => (
           <div key={g.key} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
