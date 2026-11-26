@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Sparkles, RefreshCw, Calendar, CheckCircle2,
-  Wallet, ArrowUpRight, ArrowDownRight, Activity, Target,
+  Wallet, ArrowUpRight, ArrowDownRight, Activity,
   Sun, BatteryCharging, Cpu, Gauge, Send, AlertTriangle
 } from 'lucide-react';
 import {
@@ -16,7 +16,7 @@ import {
 } from './operationSimData';
 import {
   SIM_SCENARIOS, VIEW_META, COPY, MONEY_NOTE,
-  WHY_ITEMS, WHY_CONCLUSIONS, MONTHLY_NOTE, MONTHLY_FOOTNOTE,
+  WHY_ITEMS, MONTHLY_NOTE, MONTHLY_FOOTNOTE,
   CASE_DAY_TEXT, DAILY_TEXT, CYCLE_TEXT, PRICE_TEXT, PRICE_ROWS,
   TOU_LABELS,
   CAPACITY_ITEMS, COL_LABELS, PUSH_COPY, PV_CHECK,
@@ -214,18 +214,6 @@ function MoneyView() {
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {WHY_CONCLUSIONS.map(q => (
-          <div key={q.tag} className="bg-white border border-gray-200 rounded-xl px-5 py-4 flex items-start space-x-3">
-            <Target size={15} className="text-blue-500 mt-0.5 shrink-0" />
-            <div>
-              <div className="text-[11px] font-bold text-gray-400 mb-0.5">{q.tag} · 结论</div>
-              <div className="text-xs font-semibold text-gray-800 leading-relaxed">{q.text}</div>
-            </div>
-          </div>
-        ))}
       </div>
 
     </div>
@@ -784,9 +772,6 @@ export function OperationDataPanel({ station }: { station?: any }) {
             <div>
               <div className="flex items-center space-x-2 flex-wrap">
                 <h2 className="font-black text-gray-900 text-base">{COPY.panelTitle}</h2>
-                <span className="px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200 text-gray-600 text-[10px] font-bold">
-                  {COPY.panelBadge}
-                </span>
               </div>
               <div className="text-[11px] text-gray-500 mt-1">
                 {SIM_META.station}　·　{COPY.periodLabel} {SIM_META.period}（{SIM_META.days} 天）
@@ -830,7 +815,6 @@ export function OperationDataPanel({ station }: { station?: any }) {
         <div className="flex items-center space-x-2 mb-2">
           <span className="w-1 h-3.5 bg-slate-400 rounded-full" />
           <h3 className="text-xs font-bold text-gray-700">{COPY.capacityTitle}</h3>
-          <span className="text-[11px] text-gray-400">{COPY.capacityHint}</span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {CAPACITY_ITEMS.map((it, i) => {
@@ -927,10 +911,7 @@ export function OperationDataPanel({ station }: { station?: any }) {
           <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-3">
             <Sparkles size={22} className="text-blue-500" />
           </div>
-          <div className="text-sm font-bold text-gray-800">{COPY.emptyTitle}</div>
-          <p className="text-xs text-gray-500 mt-1.5 mb-4 max-w-[560px] leading-relaxed">
-            {COPY.emptyDesc}
-          </p>
+          <div className="text-sm font-bold text-gray-800 mb-4">{COPY.emptyTitle}</div>
           <button
             type="button"
             onClick={runSim}
@@ -952,7 +933,6 @@ export function OperationDataPanel({ station }: { station?: any }) {
             <div className="flex items-center space-x-2 mb-2">
               <span className="w-1 h-3.5 bg-blue-500 rounded-full" />
               <h3 className="text-xs font-bold text-gray-700">{COPY.simTitle}</h3>
-              <span className="text-[11px] text-gray-400">{COPY.benchmarkLabel}：{scenario.benchmark}</span>
               <span className="ml-auto px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold">
                 {SIM_META.version}
               </span>

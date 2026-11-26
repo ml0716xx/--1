@@ -217,7 +217,7 @@ export const PUSH_SECTIONS: PushSection[] = [
 export const PUSH_COPY = {
   action: '推送仿真报告',
   title: '推送仿真报告',
-  subtitle: '接收方在用户端看到的完整内容，三章全量',
+  subtitle: '接收方在用户端看到的完整内容，全量推送',
   sectionTitle: '推送内容',
   selectAll: '全选',
   clearAll: '清空',
@@ -257,12 +257,10 @@ export const VIEW_META: Record<string, { label: string; hint: string }> = {
 /* ---------------------------- 面板文案 ---------------------------- */
 export const COPY = {
   panelTitle: '运营数据',
-  panelBadge: '标准站点视图',
   periodLabel: '数据区间',
 
   /* 设备容量 */
   capacityTitle: '各类设备容量',
-  capacityHint: '站点配置参数',
 
   /* 原始运行指标 */
   standardTitle: '原始运行指标',
@@ -275,7 +273,6 @@ export const COPY = {
   scenarioReady: '可用',
   scenarioPlanned: '规划中',
   emptyTitle: '策略仿真未运行',
-  emptyDesc: '运行仿真后，在相同负荷与光伏输入下按分时电价重排储能充放电计划，与实际运行逐项对比。',
   emptyAction: '运行策略仿真',
   running: '仿真计算中...',
   rerun: '重跑仿真',
@@ -284,9 +281,7 @@ export const COPY = {
 
   /* 差额构成 */
   bridgeTitle: '差额构成：实际运行 → 仿真调度',
-  bridgeNote:
-    '红色为正向差额（仿真高于实际），绿色为负向差额（仿真低于实际）。' +
-    `储能 ${sg0(A.storage.diff)} 元、光伏 ${sg0(A.pv.diff)} 元，两项合计净增 ${n0(A.net)} 元。`,
+  bridgeNote: '红色为正向差额（仿真高于实际），绿色为负向差额（仿真低于实际）。',
   bridgeRows: ['实际运行', '储能收益差', '光伏收益差', '仿真运行'],
 
   /* 分项对比 */
@@ -349,17 +344,6 @@ export const WHY_ITEMS = [
   },
 ];
 
-export const WHY_CONCLUSIONS = [
-  {
-    tag: '储能',
-    text: `收益增量的 ${n0(stTimeShare)}% 来自放电时段优化，${n0(stVolShare)}% 来自放电量增长。`,
-  },
-  {
-    tag: '光伏',
-    text: `自用结算单价 ${n4(A.pv.selfPrice)} 元/kWh、上网电价 ${n4(A.pv.exportPrice)} 元/kWh，单价差 ${n4(A.pv.priceGap)} 元/kWh。`,
-  },
-];
-
 /* ---------------------------- 月度指标解读 ---------------------------- */
 /** 每条说明以计算式开头（与 MONTHLY_FOOTNOTE 的关系：此处给单项公式，页脚只给全局口径） */
 export const MONTHLY_NOTE: Record<string, string> = {
@@ -416,9 +400,6 @@ export const CASE_DAY_TEXT = {
   /** 案例日指标拆两卡：左侧电量与效率，右侧收益与电价 */
   energyTitle: '电量指标',
   moneyTitle: '收益与电价',
-  /** 案例日数据块标题（只承载数据行，不含判读/结论） */
-  dataTitle: '当日对照数据',
-  othersTitle: '其余案例日',
   /** 案例日表的加权电价说明（放在表下） */
   priceNote:
     '充电/放电加权电价按逐 15min 电价加权（充电成本 ÷ 充电量、放电收益 ÷ 放电量）。' +

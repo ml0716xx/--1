@@ -22,13 +22,10 @@ import {
   COL_LABELS,
   CAPACITY_ITEMS,
   SIM_SCENARIOS,
-  CASE_DAY_TEXT,
   CYCLE_TEXT,
   PRICE_TEXT,
   TOU_LABELS,
   tierWindow,
-  caseDayReading,
-  otherCaseDays,
 } from './operationSimCopy';
 
 /** 千分位格式化（缺值显示「—」，与面板一致） */
@@ -67,7 +64,6 @@ const smart = (v: number | null | undefined, pct = false) => {
 };
 
 /** 当前可用场景，用于标注预览里的对比基准 */
-const readyScenario = SIM_SCENARIOS.find(s => s.status === 'ready') ?? SIM_SCENARIOS[0];
 
 /** 缩略小节：预览里每个内容块的外壳 */
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
@@ -306,28 +302,6 @@ function SectionPreview({ id }: { id: string }) {
               </table>
             </div>
 
-            {/* 其余案例日与判读方法 */}
-            <div className="mt-2.5 pt-2 border-t border-gray-100 space-y-2">
-              <div>
-                <div className="text-[9px] font-bold text-gray-400">
-                  {CASE_DAY_TEXT.othersTitle}
-                </div>
-                <div className="text-[9px] text-gray-500 leading-relaxed mt-0.5">
-                  {otherCaseDays(caseDate)}
-                </div>
-              </div>
-              <div>
-                <div className="text-[9px] font-bold text-gray-400">
-                  {CASE_DAY_TEXT.dataTitle}
-                </div>
-                <div className="text-[9px] text-gray-500 leading-relaxed mt-0.5">
-                  {caseDayReading(caseDate)}
-                </div>
-              </div>
-              <div className="text-[9px] text-gray-400">
-                {COPY.benchmarkLabel}：{readyScenario.benchmark}
-              </div>
-            </div>
           </Block>
         </>
       )}
